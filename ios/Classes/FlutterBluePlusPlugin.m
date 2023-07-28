@@ -505,9 +505,9 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
             // check mtu
             int mtu = (int) [self getMtu:peripheral];
             int dataLen = (int) [self convertHexToData:value].length;
-            if (mtu < dataLen) {
+            if ((mtu-3) < dataLen) {
                 NSString* f = @"data is longer than MTU allows. dataLen: %d > maxDataLen: %d";
-                NSString* s = [NSString stringWithFormat:f, dataLen, mtu];
+                NSString* s = [NSString stringWithFormat:f, dataLen, (mtu-3)];
                 result([FlutterError errorWithCode:@"writeDescriptor" message:s details:NULL]);
                 return;
             }
@@ -1525,9 +1525,10 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
     }
 }
 
-- (uint32_t)getMtu:(CBPeripheral *)peripheral
+- (int)getMtu:(CBPeripheral *)peripheral
 {
-    return (uint32_t)[peripheral maximumWriteValueLengthForType:CBCharacteristicWriteWithoutResponse];
+    int maxPayload = (int) [peripheral maximumWriteValueLengthForType:CBCharacteristicWriteWithoutResponse];
+    return maxPayload+3; // +3 is part of the BLE spec
 }
 
 - (ServicePair *)getServicePair:(CBPeripheral *)peripheral
