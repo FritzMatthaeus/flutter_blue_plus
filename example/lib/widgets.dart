@@ -1,4 +1,4 @@
-// Copyright 2017, Paul DeMarco.
+// Copyright 2023, Charles Weinberger & Paul DeMarco.
 // All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
@@ -145,9 +145,9 @@ class ServiceTile extends StatelessWidget {
 class CharacteristicTile extends StatefulWidget {
   final BluetoothCharacteristic characteristic;
   final List<DescriptorTile> descriptorTiles;
-  final VoidCallback? onReadPressed;
-  final VoidCallback? onWritePressed;
-  final VoidCallback? onNotificationPressed;
+  final Future<void> Function()? onReadPressed;
+  final Future<void> Function()? onWritePressed;
+  final Future<void> Function()? onNotificationPressed;
 
   const CharacteristicTile(
       {Key? key,
@@ -177,33 +177,34 @@ class _CharacteristicTileState extends State<CharacteristicTile> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text('Characteristic'),
-                Text('0x${widget.characteristic.characteristicUuid.toString().toUpperCase()}',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(color: Theme.of(context).textTheme.bodySmall?.color),
+                Text(
+                  '0x${widget.characteristic.characteristicUuid.toString().toUpperCase()}',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(color: Theme.of(context).textTheme.bodySmall?.color),
                 ),
                 Row(
                   children: [
                     if (widget.characteristic.properties.read)
                       TextButton(
                           child: Text("Read"),
-                          onPressed: () {
-                            widget.onReadPressed!();
+                          onPressed: () async {
+                            await widget.onReadPressed!();
                             setState(() {});
                           }),
                     if (widget.characteristic.properties.write)
                       TextButton(
                           child: Text(widget.characteristic.properties.writeWithoutResponse ? "WriteNoResp" : "Write"),
-                          onPressed: () {
-                            widget.onWritePressed!();
+                          onPressed: () async {
+                            await widget.onWritePressed!();
                             setState(() {});
                           }),
                     if (widget.characteristic.properties.notify || widget.characteristic.properties.indicate)
                       TextButton(
                           child: Text(widget.characteristic.isNotifying ? "Unsubscribe" : "Subscribe"),
-                          onPressed: () {
-                            widget.onNotificationPressed!();
+                          onPressed: () async {
+                            await widget.onNotificationPressed!();
                             setState(() {});
                           })
                   ],
@@ -290,3 +291,13 @@ class AdapterStateTile extends StatelessWidget {
     );
   }
 }
+
+SnackBar snackBarGood(String message) {
+  return SnackBar(content: Text(message), backgroundColor: Colors.blue);
+}
+
+SnackBar snackBarFail(String message) {
+  return SnackBar(content: Text(message), backgroundColor: Colors.red);
+}
+
+

@@ -1,6 +1,4 @@
-
 part of flutter_blue_plus;
-
 
 enum BluetoothDeviceType { unknown, classic, le, dual }
 
@@ -17,18 +15,32 @@ BluetoothDeviceType _bmToBluetoothDeviceType(BmBluetoothSpecEnum value) {
   }
 }
 
-enum BluetoothConnectionState { disconnected, connecting, connected, disconnecting }
+class DisconnectReason {
+  final ErrorPlatform platform;
+  final int? code; // specific to platform
+  final String? description;
+  DisconnectReason(this.platform, this.code, this.description);
+}
+
+enum BluetoothConnectionState {
+  disconnected,
+  connected,
+  // Deprecated: To be more precise, 'connecting' is only returned by getConnectionState (android)
+  // or CBPeripheral.state (iOS), which FlutterBluePlus does not need.
+  @Deprecated('Android & iOS dont stream this state. You can delete')
+  connecting,
+  // Deprecated: To be more precise, 'disconnecting' is only returned by getConnectionState (android)
+  // or CBPeripheral.state (iOS), which FlutterBluePlus does not need.
+  @Deprecated('Android & iOS dont stream this state. You can delete')
+  disconnecting
+}
 
 BluetoothConnectionState _bmToBluetoothConnectionState(BmConnectionStateEnum value) {
   switch (value) {
     case BmConnectionStateEnum.disconnected:
       return BluetoothConnectionState.disconnected;
-    case BmConnectionStateEnum.connecting:
-      return BluetoothConnectionState.connecting;
     case BmConnectionStateEnum.connected:
       return BluetoothConnectionState.connected;
-    case BmConnectionStateEnum.disconnecting:
-      return BluetoothConnectionState.disconnecting;
   }
 }
 
@@ -50,6 +62,41 @@ BluetoothAdapterState _bmToBluetoothAdapterState(BmAdapterStateEnum value) {
       return BluetoothAdapterState.off;
   }
 }
+
+BmConnectionPriorityEnum _bmConnectionPriorityEnum(ConnectionPriority value) {
+  switch (value) {
+    case ConnectionPriority.balanced:
+      return BmConnectionPriorityEnum.balanced;
+    case ConnectionPriority.high:
+      return BmConnectionPriorityEnum.high;
+    case ConnectionPriority.lowPower:
+      return BmConnectionPriorityEnum.lowPower;
+  }
+}
+
+BluetoothBondState _bmToBluetoothBondState(BmBondStateResponse value) {
+  switch (value.bondState) {
+    case BmBondStateEnum.none:
+      if (value.bondFailed) {
+        return BluetoothBondState.failed;
+      }
+      if (value.bondLost) {
+        return BluetoothBondState.lost;
+      }
+      return BluetoothBondState.none;
+    case BmBondStateEnum.bonding:
+      return BluetoothBondState.bonding;
+    case BmBondStateEnum.bonded:
+      return BluetoothBondState.bonded;
+  }
+}
+
+// [none] no bond
+// [bonding] bonding is underway
+// [bonded] bond success
+// [failed] a bonding attempt failed
+// [lost] a previous bond was deleted (you should reconnect to force a rebond)
+enum BluetoothBondState { none, bonding, bonded, failed, lost }
 
 enum ConnectionPriority { balanced, high, lowPower }
 

@@ -2,11 +2,11 @@
 
 <br>
 <p align="center">
-<img alt="FlutterBlue" src="https://github.com/boskokg/flutter_blue_plus/blob/master/site/flutterblue.png?raw=true" />
+<img alt="FlutterBlue" src="https://github.com/boskokg/flutter_blue_plus/blob/master/site/flutterblueplus.png?raw=true" />
 </p>
 <br><br>
 
-**Note: this plugin is continuous work from FlutterBlue since maintenance stopped.**
+**Note: this plugin is continuous work from [FlutterBlue](https://github.com/pauldemarco/flutter_blue) since maintenance stopped.**
 
 ## Contents
 
@@ -19,11 +19,17 @@
 
 ## Introduction
 
-FlutterBluePlus is a Bluetooth Low Energy plugin for [Flutter](https://flutter.dev).
+FlutterBluePlus is a Bluetooth Low Energy plugin for [Flutter](https://flutter.dev). 
 
-**Bluetooth Classic is not supported.** 
+It supports BLE Central Role only (most common). 
 
-❗ (i.e. speakers, headphones, mice, keyboards, gamepads, and more are not supported). ❗
+If you need BLE Peripheral Role, you should check out [FlutterBlePeripheral](https://pub.dev/packages/flutter_ble_peripheral).
+
+## ❗ Bluetooth Classic is not supported ❗
+
+ i.e. speakers, headphones, mice, keyboards, gamepads, Arduino HC-05 & HC-06, and more are not supported. These all use Bluetooth Classic.
+
+ Also, iBeacons are **_not_** supported on iOS. Apple requires you to use CoreLocation.
 
 ## Cross-Platform Bluetooth Low Energy
 
@@ -35,11 +41,15 @@ The code is written to be simple, robust, and incredibly easy to understand.
 
 FlutterBluePlus has zero dependencies besides Flutter, Android, and iOS themselves.
 
-This makes FlutterBluePlus very stable.
+This makes FlutterBluePlus very stable, and easy to maintain.
+
+## ⭐ Stars ⭐
+
+Please star this repo & on [pub.dev](https://pub.dev/packages/flutter_blue_plus). We all benefit from having a larger community.
 
 ## Usage
 
-### Error Handling :fire:
+### :fire: Error Handling :fire:
 
 Flutter Blue Plus takes error handling very seriously. 
 
@@ -52,7 +62,8 @@ Every error returned by the native platform is checked and thrown as an exceptio
 ### Set Log Level
 
 ```dart
-FlutterBluePlus.setLogLevel(LogLevel.verbose)
+// if your terminal doesn't support color you'll see annoying logs like `\x1B[1;35m`
+FlutterBluePlus.setLogLevel(LogLevel.verbose, color:false)
 ```
 
 Setting `LogLevel.verbose` shows *all* data in and out.
@@ -68,20 +79,28 @@ Setting `LogLevel.verbose` shows *all* data in and out.
 
 ### Enable Bluetooth
 
+**Note:** On iOS, a "*This app would like to use Bluetooth*" system dialogue appears on first call to a FlutterBluePlus method. This is when the `CBCentralManager` (iOS) & `BluetoothManager` (Android) are initialized.
+ 
 ```dart
-// check adapter availability  
+// check adapter availability
 if (await FlutterBluePlus.isAvailable == false) {
     print("Bluetooth not supported by this device");
     return;
 }
 
 // turn on bluetooth ourself if we can
+// for iOS, the user controls bluetooth enable/disable
 if (Platform.isAndroid) {
     await FlutterBluePlus.turnOn();
 }
 
-// wait bluetooth to be on
-await FlutterBluePlus.adapterState.where((s) => s == BluetoothAdapterState.on).first;
+// wait bluetooth to be on & print states
+// note: for iOS the initial state is typically BluetoothAdapterState.unknown
+// note: if you have permissions issues you will get stuck at BluetoothAdapterState.unauthorized
+await FlutterBluePlus.adapterState
+ .map((s){print(s);return s;})
+ .where((s) => s == BluetoothAdapterState.on)
+ .first;
 ```
 
 ### Scan for devices
@@ -107,16 +126,25 @@ await FlutterBluePlus.stopScan();
 ### Connect to a device
 
 ```dart
+// listen for disconnection
+device.connectionState.listen((BluetoothConnectionState state) async {
+    if (state == BluetoothConnectionState.disconnected) {
+        // typically, start a periodic timer that tries to periodically reconnect.
+        // Note: you must always re-discover services after disconnection!
+    }
+});
+
 // Connect to the device
 await device.connect();
 
 // Disconnect from device
-device.disconnect();
+await device.disconnect();
 ```
 
 ### Discover services
 
 ```dart
+// Note: You must call this again if disconnected!
 List<BluetoothService> services = await device.discoverServices();
 services.forEach((service) {
     // do something with service
@@ -148,8 +176,8 @@ extension WriteLarge on BluetoothCharacteristic {
   Future<void> writeLarge(List<int> value, int mtu, {int timeout = 15}) async {
     int chunk = mtu-3;
     for (int i = 0; i < value.length; i += chunk) {
-      List<int> subvalue = value.sublist(i, max(i + chunk, value.length));
-      write(subvalue, withoutResponse:false, timeout: timeout);
+      List<int> subvalue = value.sublist(i, min(i + chunk, value.length));
+      await write(subvalue, withoutResponse:false, timeout: timeout);
     }
   }
 }
@@ -184,6 +212,18 @@ characteristic.onValueReceived.listen((value) {
 await characteristic.setNotifyValue(true);
 ```
 
+### Get Connected System Devices
+
+These devices are already connected to the system, but must be reconnected by *your app* before you can communicate with them.
+
+```dart
+List<BluetoothDevice> connectedSystemDevices = await FlutterBluePlus.connectedSystemDevices;
+for (var d in connectedSystemDevices) {
+    await d.connect(); // Must connect *our* app to the device
+    await d.discoverServices();
+}
+```
+
 ### Read the MTU and request larger size
 
 ```dart
@@ -197,12 +237,12 @@ Note that iOS will not allow requests of MTU size, and will always try to negoti
 
 ### Change the minSdkVersion for Android
 
-flutter_blue_plus is compatible only from version 19 of Android SDK so you should change this in **android/app/build.gradle**:
+flutter_blue_plus is compatible only from version 21 of Android SDK so you should change this in **android/app/build.gradle**:
 
 ```dart
 Android {
   defaultConfig {
-     minSdkVersion: 19
+     minSdkVersion: 21
 ```
 
 ### Add permissions for Android (No Location)
@@ -301,11 +341,9 @@ For location permissions on iOS see more at: [https://developer.apple.com/docume
 
 |                        |      Android       |        iOS         | Throws | Description                                                |
 | :--------------------- | :----------------: | :----------------: | :----: | :----------------------------------------------------------|
-| adapterState           | :white_check_mark: | :white_check_mark: |        | Stream of state changes for the bluetooth adapter          |
 | isAvailable            | :white_check_mark: | :white_check_mark: |        | Checks whether the device supports Bluetooth               |
-| isOn                   | :white_check_mark: | :white_check_mark: |        | Checks if Bluetooth adapter is turned on                   |
 | turnOn                 | :white_check_mark: |                    | :fire: | Turns on the bluetooth adapter                             |
-| turnOff                | :white_check_mark: |                    | :fire: | Turns off the bluetooth adapter                            |
+| adapterState           | :white_check_mark: | :white_check_mark: |        | Stream of on & off states of the bluetooth adapter         |
 | scan                   | :white_check_mark: | :white_check_mark: | :fire: | Starts a scan for Ble devices and returns a stream         |
 | startScan              | :white_check_mark: | :white_check_mark: | :fire: | Starts a scan for Ble devices with no return value         |
 | stopScan               | :white_check_mark: | :white_check_mark: | :fire: | Stop an existing scan for Ble devices                      |
@@ -327,11 +365,12 @@ For location permissions on iOS see more at: [https://developer.apple.com/docume
 | servicesList              | :white_check_mark: | :white_check_mark: |        | The list of services that were discovered                  |
 | servicesStream            | :white_check_mark: | :white_check_mark: |        | Stream of services changes                                 |
 | connectionState           | :white_check_mark: | :white_check_mark: |        | Stream of connection changes for the Bluetooth Device      |
+| bondState                 | :white_check_mark: |                    |        | Stream of device bond state. Can be useful on Android      |
 | mtu                       | :white_check_mark: | :white_check_mark: | :fire: | Stream of mtu size changes                                 |
 | readRssi                  | :white_check_mark: | :white_check_mark: | :fire: | Read RSSI from a connected device                          |
 | requestMtu                | :white_check_mark: |                    | :fire: | Request to change the MTU for the device                   |
 | requestConnectionPriority | :white_check_mark: |                    | :fire: | Request to update a high priority, low latency connection  |
-| pair                      | :white_check_mark: |                    | :fire: | Calls createBond on a device                               |
+| createBond                | :white_check_mark: |                    | :fire: | Force a system pairing dialogue to show, if needed         |
 | removeBond                | :white_check_mark: |                    | :fire: | Remove Bluetooth Bond of device                            |
 | setPreferredPhy           | :white_check_mark: |                    |        | Set preferred RX and TX phy for connection and phy options |
 | clearGattCache            | :white_check_mark: |                    | :fire: | Clear android cache of service discovery results           |
@@ -398,6 +437,7 @@ These devices may be found in System Settings, but they cannot be connected to b
 - you might need put your device in "discovery mode"
 - your phone may have already connected automatically
 - another app may have already connected to your device
+- another phone may have already connected to your device
 
 Try looking through already connected devices:
 
@@ -427,11 +467,35 @@ You should check if they can discover your device.
 
 ---
 
+### Connection fails
+
+**1. Your ble device may be low battery**
+
+Bluetooth can become erratic when your peripheral device is low battery.
+
+**2. Your ble device may have refused the connection or have a bug**
+
+Connection is a two-way process. Your ble device may be misconfigured.
+
+**3. You may be on the edge of the Bluetooth range.**
+
+The signal is too weak, or there are a lot of devices causing radio interference.
+
+**4. Some phones have an issue connecting while scanning.**
+
+The Huawei P8 Lite is one of the reported phones to have this issue. Try stopping your scanner before connecting.
+
+**5. Try restarting your phone**
+
+Bluetooth is a complicated system service, and can enter a bad state.
+
+---
+
 ### onValueReceived is never called
 
-**1. you are not subscribed**
+**1. you are not subscribed OR not calling read**
 
-Your device will only send values after you call `await characteristic.setNotifyValue(true)`
+Your device will only send values after you call `await characteristic.setNotifyValue(true)`, or `await characteristic.read()`
 
 **2. you are calling write**
 
@@ -451,6 +515,8 @@ Try rebooting your ble device.
 
 Some ble devices have buggy software and stop sending data.
 
+---
+
 ### characteristic writes fails
 
 **1. the characeristic is not writeable**
@@ -465,7 +531,7 @@ Characteristics only support writes up to a certain size.
 
 `writeWithoutResponse`: you can only write up to (MTU-3) at a time. This is a BLE limitation.
 
-`write`: look in the usage section for a `writeLarge`` function you can use to solve this issue.
+`write`: look in the [Usage](#usage) section for a `writeLarge` function you can use to solve this issue.
 
 **3. the characeristic does not support writeWithoutResponse**
 
@@ -485,6 +551,7 @@ Maybe your device crashed, or is not sending a response due to software bugs.
 
 Bluetooth is wireless and will not always work.
 
+---
 
 ### characteristic read fails
 

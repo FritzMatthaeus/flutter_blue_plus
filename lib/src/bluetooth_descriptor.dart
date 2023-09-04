@@ -1,4 +1,4 @@
-// Copyright 2017, Paul DeMarco.
+// Copyright 2023, Charles Weinberger & Paul DeMarco.
 // All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
@@ -15,6 +15,9 @@ class BluetoothDescriptor {
   // convenience accessor
   Guid get uuid => descriptorUuid;
 
+  /// this variable is updated:
+  ///   - *live* if you call onValueReceived.listen() or lastValueStream.listen()
+  ///   - *once* if you call read()
   List<int> lastValue = [];
 
   // same as onValueReceived, but the stream immediately starts
@@ -27,7 +30,7 @@ class BluetoothDescriptor {
   Stream<List<int>> get onValueReceived => FlutterBluePlus._methodStream.stream
           .where((m) => m.method == "OnDescriptorResponse")
           .map((m) => m.arguments)
-          .map((buffer) => BmOnDescriptorResponse.fromMap(buffer))
+          .map((args) => BmOnDescriptorResponse.fromMap(args))
           .where((p) => (p.remoteId == remoteId.toString()))
           .where((p) => (p.descriptorUuid == descriptorUuid))
           .where((p) => (p.characteristicUuid == characteristicUuid))
@@ -66,7 +69,7 @@ class BluetoothDescriptor {
       Stream<BmOnDescriptorResponse> responseStream = FlutterBluePlus._methodStream.stream
           .where((m) => m.method == "OnDescriptorResponse")
           .map((m) => m.arguments)
-          .map((buffer) => BmOnDescriptorResponse.fromMap(buffer))
+          .map((args) => BmOnDescriptorResponse.fromMap(args))
           .where((p) => (p.type == BmOnDescriptorResponseType.read))
           .where((p) => (p.remoteId == request.remoteId))
           .where((p) => (p.serviceUuid == request.serviceUuid))
@@ -78,11 +81,11 @@ class BluetoothDescriptor {
 
       await FlutterBluePlus._invokeMethod('readDescriptor', request.toMap());
 
-      BmOnDescriptorResponse response = await futureResponse.timeout(Duration(seconds: timeout));
+      BmOnDescriptorResponse response = await futureResponse.fbpTimeout(timeout, "readDescriptor");
 
       // failed?
       if (!response.success) {
-        throw FlutterBluePlusException("readDescriptor", response.errorCode, response.errorString);
+        throw FlutterBluePlusException(_nativeError, "readDescriptor", response.errorCode, response.errorString);
       }
 
       readValue = response.value;
@@ -114,7 +117,7 @@ class BluetoothDescriptor {
       Stream<BmOnDescriptorResponse> responseStream = FlutterBluePlus._methodStream.stream
           .where((m) => m.method == "OnDescriptorResponse")
           .map((m) => m.arguments)
-          .map((buffer) => BmOnDescriptorResponse.fromMap(buffer))
+          .map((args) => BmOnDescriptorResponse.fromMap(args))
           .where((p) => (p.type == BmOnDescriptorResponseType.write))
           .where((p) => (p.remoteId == request.remoteId))
           .where((p) => (p.serviceUuid == request.serviceUuid))
@@ -126,11 +129,11 @@ class BluetoothDescriptor {
 
       await FlutterBluePlus._invokeMethod('writeDescriptor', request.toMap());
 
-      BmOnDescriptorResponse response = await futureResponse.timeout(Duration(seconds: timeout));
+      BmOnDescriptorResponse response = await futureResponse.fbpTimeout(timeout, "writeDescriptor");
 
       // failed?
       if (!response.success) {
-        throw FlutterBluePlusException("writeDescriptor", response.errorCode, response.errorString);
+        throw FlutterBluePlusException(_nativeError, "writeDescriptor", response.errorCode, response.errorString);
       }
     } finally {
       writeMutex.give();

@@ -53,6 +53,15 @@ List<T> _addOrUpdate<T>(List<T> results, T item) {
   return list;
 }
 
+extension FutureTimeout<T> on Future<T> {
+  Future<T> fbpTimeout(int seconds, String errorName) {
+    return this.timeout(Duration(seconds: seconds), onTimeout: () {
+      throw FlutterBluePlusException(
+          ErrorPlatform.dart, errorName, FbpErrorCode.timeout.index, "Timed out after ${seconds}s");
+    });
+  }
+}
+
 // This is a reimplementation of BehaviorSubject from RxDart library.
 // It is essentially a stream but:
 //  1. we cache the latestValue of the stream
@@ -89,6 +98,7 @@ class _BufferStream<T> {
   final Stream<T> _inputStream;
   late final StreamSubscription? _subscription;
   late final StreamController<T> _controller;
+  late bool hasReceivedValue = false;
 
   _BufferStream.listen(this._inputStream) {
     _controller = StreamController<T>(
@@ -107,6 +117,7 @@ class _BufferStream<T> {
     // immediately start listening to the inputStream
     _subscription = _inputStream.listen(
       (data) {
+        hasReceivedValue = true;
         _controller.add(data);
       },
       onError: (e) {
@@ -376,7 +387,7 @@ class _Mutex {
 
   Future<void> take() async {
     int mine = issued;
-    issued++; 
+    issued++;
     // tasks are executed in the same order they call take()
     while (mine != current) {
       await _controller.stream.first; // wait
