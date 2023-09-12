@@ -1,3 +1,75 @@
+## 1.15.5
+* **[Fix]** firstWhereOrNull conflict
+
+## 1.15.4
+* **[Fix]** some typos in disconnect exceptions (from 1.15.3)
+
+## 1.15.3
+* **[Improve]** prefer dart exceptions over platform exceptions when device is disconnected
+
+## 1.15.2
+* **[Fix]** stopScan was not awaiting for invokeMethod
+
+## 1.15.1
+* **[Fix]** FlutterBluePlus.scanResults should always return list copy to avoid iteration exceptions
+
+## 1.15.0
+* **[Refactor]** simplify scanning api
+* **[Feature]** add `removeIfGone` option to `startScan`
+
+**Note:** You can safely delete the `allowDuplicates` option if you are using it. It does not affect behavior.
+
+**Breaking Changes & Improvements:**
+- **(simplify)** removed `FlutterBluePlus.scan`. Use `FlutterBluePlus.scartScan(oneByOne: true)` instead.
+- **(simplify)** removed `allowDuplicates` option for `scartScan`. It is not supported on android. We always filter duplicates anyway.
+- **(simplify)** removed `macAddresses` option for `scartScan`. It was not supported on iOS, and is overall not very useful.
+- **(simplify)** `startScan` now returns `Future<void>` instead of `Future<List<ScanResult>>`. It was redundant and confusing.
+- **(improvement)** if you `await startScan` it will complete once the scan starts, instead of when it ends
+- **(improvement)** if you call `startScan` twice, it will cancel the previous scan, instead of throwing an exception
+
+## 1.14.24
+* **[Fix]** Android: setNotifyValue: (code: 5) notifications were not updated
+* **[Fix]** Hot Restart: stop scanning when hot restarting
+
+## 1.14.23
+* **[Fix]** setNotifyValue & others must be cleared after disconnection (regression in 1.14.21)
+
+## 1.14.22
+* **[Fix]** Android: Hot Restart: could get stuck in infinite loop (regression in 1.14.19)
+
+## 1.14.21
+* **[Refactor]** dart: store lastValue at global level so Desc & Chr classes are fully immutable
+
+## 1.14.20
+* **[Fix]** iOS: Hot Restart: could get stuck in infinite loop (regression in 1.14.19)
+
+## 1.14.19
+* **[Fix]** Hot Restart: close all connections when dart vm is restarted
+
+## 1.14.18
+* **[Fix]** Android: crash uuid128 null deref (regression in 1.14.17)
+
+## 1.14.17
+* **[Fix]** Android: shortUUID: characteristic not found
+
+## 1.14.16
+* **[Fix]** macOS: lower required version to 10.11 (equivalent to  iOS 9.0)
+
+## 1.14.15
+* **[Rename]** allowSplits -> allowLongWrite
+
+## 1.14.14
+* **[Fix]** Android: dataLen longer than allowed (regression in 1.14.13)
+
+## 1.14.13
+* **[Fix]** iOS: onMtuChanged was not called
+* **[Feature]** iOS & Android: writeCharacteristic: add 'allowLongWrite' option to do longer writes
+
+## 1.14.12
+* **[Fix]** Android: autoconnect was not working. regressed sometimes after 1.4.0
+* **[Cleanup]** Android: cleanup bmAdvertisementData
+* **[Improve]** iOS: check that characteristic supports READ, WRITE, WRITE_NO_RESP properties and throw error otherwise
+
 ## 1.14.11
 * **[Deprecate]** dart: isDiscoveringServices & servicesStream. They can be easily implemented yourself
 

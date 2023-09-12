@@ -41,24 +41,11 @@ class BluetoothDevice {
         localName = localName ?? "Unknown",
         type = type ?? BluetoothDeviceType.unknown;
 
-  // stream return whether or not we are currently discovering services
-  @Deprecated("planed for removal (Jan 2024). It can be easily implemented yourself") // deprecated on Aug 2023
-  Stream<bool> get isDiscoveringServices => _isDiscoveringServices.stream;
-
   // Get services
   //  - returns null if discoverServices() has not been called
   //  - this is cleared on disconnection. You must call discoverServices() again
-  List<BluetoothService>? get servicesList => FlutterBluePlus._knownServices[remoteId];
-
-  /// Stream of bluetooth services offered by the remote device
-  ///   - this stream is only updated when you call discoverServices()
-  @Deprecated("planed for removal (Jan 2024). It can be easily implemented yourself") // deprecated on Aug 2023
-  Stream<List<BluetoothService>> get servicesStream {
-    if (FlutterBluePlus._knownServices[remoteId] != null) {
-      return _services.stream.newStreamWithInitialValue(FlutterBluePlus._knownServices[remoteId]!);
-    } else {
-      return _services.stream;
-    }
+  List<BluetoothService>? get servicesList {
+    return FlutterBluePlus._knownServices[remoteId]?.services.map((p) => BluetoothService.fromProto(p)).toList();
   }
 
   /// Establishes a connection to the Bluetooth Device.
@@ -140,6 +127,12 @@ class BluetoothDevice {
 
   /// Discover services, characteristics, and descriptors of the remote device
   Future<List<BluetoothService>> discoverServices({int timeout = 15}) async {
+    // check connected
+    if (FlutterBluePlus._isDeviceConnected(remoteId) == false) {
+      throw FlutterBluePlusException(ErrorPlatform.dart, "discoverServices",
+        FbpErrorCode.deviceIsDisconnected.index, "device is not connected");
+    }
+
     // Only allow a single 'discoverServices' operation at the same time per device.
     String key = remoteId.str + ":discoverServices";
     _Mutex opMutex = await _MutexFactory.getMutexForKey(key);
@@ -171,9 +164,6 @@ class BluetoothDevice {
       }
 
       result = response.services.map((p) => BluetoothService.fromProto(p)).toList();
-
-      // remember known services
-      FlutterBluePlus._knownServices[remoteId] = result;
 
       // add to stream
       _services.add(result);
@@ -227,6 +217,12 @@ class BluetoothDevice {
 
   /// Read the RSSI of connected remote device
   Future<int> readRssi({int timeout = 15}) async {
+    // check connected
+    if (FlutterBluePlus._isDeviceConnected(remoteId) == false) {
+      throw FlutterBluePlusException(ErrorPlatform.dart, "readRssi",
+        FbpErrorCode.deviceIsDisconnected.index, "device is not connected");
+    }
+
     // Only allow a single 'readRssi' operation at the same time per device.
     String key = remoteId.str + ":readRssi";
     _Mutex opMutex = await _MutexFactory.getMutexForKey(key);
@@ -264,8 +260,15 @@ class BluetoothDevice {
   /// Request to change MTU (Android Only)
   ///  - returns new MTU
   Future<int> requestMtu(int desiredMtu, {int timeout = 15}) async {
+    // check android
     if (Platform.isAndroid == false) {
       throw FlutterBluePlusException(ErrorPlatform.dart, "requestMtu", FbpErrorCode.androidOnly.index, "android-only");
+    }
+
+    // check connected
+    if (FlutterBluePlus._isDeviceConnected(remoteId) == false) {
+      throw FlutterBluePlusException(ErrorPlatform.dart, "requestMtu",
+        FbpErrorCode.deviceIsDisconnected.index, "device is not connected");
     }
 
     // Only allow a single 'requestMtu' operation at the same time per device.
@@ -303,9 +306,16 @@ class BluetoothDevice {
 
   /// Request connection priority update (Android only)
   Future<void> requestConnectionPriority({required ConnectionPriority connectionPriorityRequest}) async {
+    // check android
     if (Platform.isAndroid == false) {
       throw FlutterBluePlusException(
           ErrorPlatform.dart, "setPreferredPhy", FbpErrorCode.androidOnly.index, "android-only");
+    }
+
+    // check connected
+    if (FlutterBluePlus._isDeviceConnected(remoteId) == false) {
+      throw FlutterBluePlusException(ErrorPlatform.dart, "requestConnectionPriority",
+        FbpErrorCode.deviceIsDisconnected.index, "device is not connected");
     }
 
     var request = BmConnectionPriorityRequest(
@@ -313,10 +323,7 @@ class BluetoothDevice {
       connectionPriority: _bmConnectionPriorityEnum(connectionPriorityRequest),
     );
 
-    await FlutterBluePlus._invokeMethod(
-      'requestConnectionPriority',
-      request.toMap(),
-    );
+    await FlutterBluePlus._invokeMethod('requestConnectionPriority', request.toMap());
   }
 
   /// Set the preferred connection (Android Only)
@@ -329,9 +336,16 @@ class BluetoothDevice {
     required int rxPhy,
     required PhyCoding option,
   }) async {
+    // check android
     if (Platform.isAndroid == false) {
       throw FlutterBluePlusException(
           ErrorPlatform.dart, "setPreferredPhy", FbpErrorCode.androidOnly.index, "android-only");
+    }
+
+    // check connected
+    if (FlutterBluePlus._isDeviceConnected(remoteId) == false) {
+      throw FlutterBluePlusException(ErrorPlatform.dart, "setPreferredPhy",
+        FbpErrorCode.deviceIsDisconnected.index, "device is not connected");
     }
 
     var request = BmPreferredPhy(
@@ -341,19 +355,21 @@ class BluetoothDevice {
       phyOptions: option.index,
     );
 
-    await FlutterBluePlus._invokeMethod(
-      'setPreferredPhy',
-      request.toMap(),
-    );
+    await FlutterBluePlus._invokeMethod('setPreferredPhy', request.toMap());
   }
 
-  /// Force pairing dialogue to show. (Android Only)
-  /// Typically, the only way to create a pairing request and show the pairing
-  /// dialog in Android is to connect and try to use an encrypted characteristic which
-  /// is a bit awkward of an API. Calling this function circumvents that step.
+  /// Force the bonding popup to show now (Android Only) 
+  /// Note! calling this is usually not necessary!! The platform does it automatically.
   Future<void> createBond({int timeout = 90}) async {
+    // check android
     if (Platform.isAndroid == false) {
       throw FlutterBluePlusException(ErrorPlatform.dart, "createBond", FbpErrorCode.androidOnly.index, "android-only");
+    }
+
+    // check connected
+    if (FlutterBluePlus._isDeviceConnected(remoteId) == false) {
+      throw FlutterBluePlusException(ErrorPlatform.dart, "createBond",
+        FbpErrorCode.deviceIsDisconnected.index, "device is not connected");
     }
 
     // Only allow a single 'createRemoveBond' operation at the same time per device.
@@ -390,6 +406,7 @@ class BluetoothDevice {
 
   /// Remove bond (Android Only)
   Future<void> removeBond({int timeout = 30}) async {
+    // check android
     if (Platform.isAndroid == false) {
       throw FlutterBluePlusException(ErrorPlatform.dart, "removeBond", FbpErrorCode.androidOnly.index, "android-only");
     }
@@ -428,15 +445,24 @@ class BluetoothDevice {
 
   /// Refresh ble services & characteristics (Android Only)
   Future<void> clearGattCache() async {
+    // check android
     if (Platform.isAndroid == false) {
       throw FlutterBluePlusException(
           ErrorPlatform.dart, "clearGattCache", FbpErrorCode.androidOnly.index, "android-only");
     }
+
+    // check connected
+    if (FlutterBluePlus._isDeviceConnected(remoteId) == false) {
+      throw FlutterBluePlusException(ErrorPlatform.dart, "clearGattCache",
+        FbpErrorCode.deviceIsDisconnected.index, "device is not connected");
+    }
+
     await FlutterBluePlus._invokeMethod('clearGattCache', remoteId.str);
   }
 
   // Get the current bondState of the device (Android Only)
   Stream<BluetoothBondState> get bondState async* {
+    // check android
     if (Platform.isAndroid == false) {
       throw FlutterBluePlusException(ErrorPlatform.dart, "bondState", FbpErrorCode.androidOnly.index, "android-only");
     }
@@ -492,6 +518,21 @@ class BluetoothDevice {
         'isDiscoveringServices: ${_isDiscoveringServices.value}, '
         'services: ${FlutterBluePlus._knownServices[remoteId]}'
         '}';
+  }
+
+  // stream return whether or not we are currently discovering services
+  @Deprecated("planed for removal (Jan 2024). It can be easily implemented yourself") // deprecated on Aug 2023
+  Stream<bool> get isDiscoveringServices => _isDiscoveringServices.stream;
+  
+  /// Stream of bluetooth services offered by the remote device
+  ///   - this stream is only updated when you call discoverServices()
+  @Deprecated("planed for removal (Jan 2024). It can be easily implemented yourself") // deprecated on Aug 2023
+  Stream<List<BluetoothService>> get servicesStream {
+    if (FlutterBluePlus._knownServices[remoteId] != null) {
+      return _services.stream.newStreamWithInitialValue(servicesList!);
+    } else {
+      return _services.stream;
+    }
   }
 
   @Deprecated('Use createBond() instead')

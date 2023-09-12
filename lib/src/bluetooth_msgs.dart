@@ -272,7 +272,6 @@ class BmBluetoothCharacteristic {
   final Guid characteristicUuid;
   List<BmBluetoothDescriptor> descriptors;
   BmCharacteristicProperties properties;
-  List<int> value;
 
   BmBluetoothCharacteristic({
     required this.remoteId,
@@ -281,7 +280,6 @@ class BmBluetoothCharacteristic {
     required this.characteristicUuid,
     required this.descriptors,
     required this.properties,
-    required this.value,
   });
 
   factory BmBluetoothCharacteristic.fromMap(Map<dynamic, dynamic> json) {
@@ -298,7 +296,6 @@ class BmBluetoothCharacteristic {
       characteristicUuid: Guid(json['characteristic_uuid']),
       descriptors: descs,
       properties: BmCharacteristicProperties.fromMap(json['properties']),
-      value: _hexDecode(json['value']),
     );
   }
 }
@@ -308,14 +305,12 @@ class BmBluetoothDescriptor {
   final Guid serviceUuid;
   final Guid characteristicUuid;
   final Guid descriptorUuid;
-  final List<int> value;
 
   BmBluetoothDescriptor({
     required this.remoteId,
     required this.serviceUuid,
     required this.characteristicUuid,
     required this.descriptorUuid,
-    required this.value,
   });
 
   factory BmBluetoothDescriptor.fromMap(Map<dynamic, dynamic> json) {
@@ -324,7 +319,6 @@ class BmBluetoothDescriptor {
       serviceUuid: Guid(json['service_uuid']),
       characteristicUuid: Guid(json['characteristic_uuid']),
       descriptorUuid: Guid(json['descriptor_uuid']),
-      value: _hexDecode(json['value']),
     );
   }
 }
@@ -531,6 +525,7 @@ class BmWriteCharacteristicRequest {
   final Guid characteristicUuid;
   final BmWriteType writeType;
   final BmWriteIgnoreMtuRestrictionType ignoreMtuRestriction;
+  final bool allowLongWrite;
   final List<int> value;
 
   BmWriteCharacteristicRequest({
@@ -539,6 +534,7 @@ class BmWriteCharacteristicRequest {
     required this.secondaryServiceUuid,
     required this.characteristicUuid,
     required this.writeType,
+    required this.allowLongWrite,
     required this.value,
     required this.ignoreMtuRestriction,
   });
@@ -550,6 +546,7 @@ class BmWriteCharacteristicRequest {
     data['secondary_service_uuid'] = secondaryServiceUuid?.toString();
     data['characteristic_uuid'] = characteristicUuid.toString();
     data['write_type'] = writeType.index;
+    data['allow_long_write'] = allowLongWrite ? 1 : 0;
     data['value'] = _hexEncode(value);
     data['ignore_mtu_restriction'] = ignoreMtuRestriction.index;
     return data;
@@ -585,23 +582,7 @@ class BmWriteDescriptorRequest {
   }
 }
 
-enum BmOnDescriptorResponseType {
-  read, // 0
-  write, // 1
-}
-
-BmOnDescriptorResponseType bmOnDescriptorResponseParse(int i) {
-  switch (i) {
-    case 0:
-      return BmOnDescriptorResponseType.read;
-    case 1:
-      return BmOnDescriptorResponseType.write;
-  }
-  throw ("invalid BmOnDescriptorResponseType type: $i");
-}
-
-class BmOnDescriptorResponse {
-  final BmOnDescriptorResponseType type;
+class BmOnDescriptorRead {
   final String remoteId;
   final Guid serviceUuid;
   final Guid? secondaryServiceUuid;
@@ -612,8 +593,7 @@ class BmOnDescriptorResponse {
   final int? errorCode;
   final String? errorString;
 
-  BmOnDescriptorResponse({
-    required this.type,
+  BmOnDescriptorRead({
     required this.remoteId,
     required this.serviceUuid,
     required this.secondaryServiceUuid,
@@ -625,15 +605,49 @@ class BmOnDescriptorResponse {
     required this.errorString,
   });
 
-  factory BmOnDescriptorResponse.fromMap(Map<dynamic, dynamic> json) {
-    return BmOnDescriptorResponse(
-      type: bmOnDescriptorResponseParse(json['type']),
+  factory BmOnDescriptorRead.fromMap(Map<dynamic, dynamic> json) {
+    return BmOnDescriptorRead(
       remoteId: json['remote_id'],
       serviceUuid: Guid(json['service_uuid']),
       secondaryServiceUuid: json['secondary_service_uuid'] != null ? Guid(json['secondary_service_uuid']) : null,
       characteristicUuid: Guid(json['characteristic_uuid']),
       descriptorUuid: Guid(json['descriptor_uuid']),
       value: _hexDecode(json['value']),
+      success: json['success'] != 0,
+      errorCode: json['error_code'],
+      errorString: json['error_string'],
+    );
+  }
+}
+
+class BmOnDescriptorWrite {
+  final String remoteId;
+  final Guid serviceUuid;
+  final Guid? secondaryServiceUuid;
+  final Guid characteristicUuid;
+  final Guid descriptorUuid;
+  final bool success;
+  final int? errorCode;
+  final String? errorString;
+
+  BmOnDescriptorWrite({
+    required this.remoteId,
+    required this.serviceUuid,
+    required this.secondaryServiceUuid,
+    required this.characteristicUuid,
+    required this.descriptorUuid,
+    required this.success,
+    required this.errorCode,
+    required this.errorString,
+  });
+
+  factory BmOnDescriptorWrite.fromMap(Map<dynamic, dynamic> json) {
+    return BmOnDescriptorWrite(
+      remoteId: json['remote_id'],
+      serviceUuid: Guid(json['service_uuid']),
+      secondaryServiceUuid: json['secondary_service_uuid'] != null ? Guid(json['secondary_service_uuid']) : null,
+      characteristicUuid: Guid(json['characteristic_uuid']),
+      descriptorUuid: Guid(json['descriptor_uuid']),
       success: json['success'] != 0,
       errorCode: json['error_code'],
       errorString: json['error_string'],

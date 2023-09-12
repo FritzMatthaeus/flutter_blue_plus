@@ -40,17 +40,15 @@ int _compareAsciiLowerCase(String a, String b) {
   return defaultResult.sign;
 }
 
-// add to list if item is new,
-// or update existing item
-List<T> _addOrUpdate<T>(List<T> results, T item) {
-  var list = List<T>.from(results);
-  if (list.contains(item)) {
-    int index = list.indexOf(item);
-    list[index] = item;
-  } else {
-    list.add(item);
+extension AddOrUpdate<T> on List<T> {
+  void addOrUpdate(T item) {
+    final index = indexOf(item);
+    if (index != -1) {
+      this[index] = item;
+    } else {
+      add(item);
+    }
   }
-  return list;
 }
 
 extension FutureTimeout<T> on Future<T> {
@@ -323,6 +321,7 @@ class _NewStreamWithInitialValueTransformer<T> extends StreamTransformerBase<T, 
 }
 
 extension _StreamDoOnDone<T> on Stream<T> {
+  // ignore: unused_element
   Stream<T> doOnDone(void Function() onDone) {
     return transform(_OnDoneTransformer(onDone: onDone));
   }
@@ -437,3 +436,16 @@ String _brown(String s) {
   // Use ANSI escape codes
   return '\x1B[1;33m$s\x1B[0m';
 }
+
+extension FirstWhereOrNullExtension<T> on Iterable<T> {
+  T? _firstWhereOrNull(bool Function(T) test) {
+    for (var element in this) {
+      if (test(element)) {
+        return element;
+      }
+    }
+    return null;
+  }
+}
+
+
