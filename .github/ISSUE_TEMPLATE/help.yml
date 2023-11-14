@@ -1,7 +1,7 @@
-name: Bug Report
-description: File a bug report
-title: "[Bug]: "
-labels: ["bug"]
+name: Help / Question
+description: Need help?
+title: "[Help]: "
+labels: ["help"]
 body:
   - type: checkboxes
     attributes:

@@ -28,27 +28,99 @@ class BmBluetoothAdapterState {
   }
 }
 
-class BmAdvertisementData {
-  final String? localName;
+class BmMsdFilter {
+  int manufacturerId;
+  List<int>? data;
+  List<int>? mask;
+  BmMsdFilter(this.manufacturerId, this.data, this.mask);
+  Map<dynamic, dynamic> toMap() {
+    final Map<dynamic, dynamic> map = {};
+    map['manufacturer_id'] = manufacturerId;
+    map['data'] = _hexEncode(data ?? []);
+    map['mask'] = _hexEncode(mask ?? []);
+    return map;
+  }
+}
+
+class BmServiceDataFilter {
+  Guid service;
+  List<int> data;
+  List<int> mask;
+  BmServiceDataFilter(this.service, this.data, this.mask);
+  Map<dynamic, dynamic> toMap() {
+    final Map<dynamic, dynamic> map = {};
+    map['service'] = service.str;
+    map['data'] = _hexEncode(data);
+    map['mask'] = _hexEncode(mask);
+    return map;
+  }
+}
+
+class BmScanSettings {
+  final List<Guid> withServices;
+  final List<String> withRemoteIds;
+  final List<String> withNames;
+  final List<String> withKeywords;
+  final List<BmMsdFilter> withMsd;
+  final List<BmServiceDataFilter> withServiceData;
+  final bool continuousUpdates;
+  final int continuousDivisor;
+  final int androidScanMode;
+  final bool androidUsesFineLocation;
+
+  BmScanSettings({
+    required this.withServices,
+    required this.withRemoteIds,
+    required this.withNames,
+    required this.withKeywords,
+    required this.withMsd,
+    required this.withServiceData,
+    required this.continuousUpdates,
+    required this.continuousDivisor,
+    required this.androidScanMode,
+    required this.androidUsesFineLocation,
+  });
+
+  Map<dynamic, dynamic> toMap() {
+    final Map<dynamic, dynamic> data = {};
+    data['with_services'] = withServices.map((s) => s.str).toList();
+    data['with_remote_ids'] = withRemoteIds;
+    data['with_names'] = withNames;
+    data['with_keywords'] = withKeywords;
+    data['with_msd'] = withMsd.map((d) => d.toMap()).toList();
+    data['with_service_data'] = withServiceData.map((d) => d.toMap()).toList();
+    data['continuous_updates'] = continuousUpdates;
+    data['continuous_divisor'] = continuousDivisor;
+    data['android_scan_mode'] = androidScanMode;
+    data['android_uses_fine_location'] = androidUsesFineLocation;
+    return data;
+  }
+}
+
+class BmScanAdvertisement {
+  final String remoteId;
+  final String? platformName;
+  final String? advName;
   final bool connectable;
   final int? txPowerLevel;
   final Map<int, List<int>> manufacturerData;
-  final Map<String, List<int>> serviceData;
+  final Map<Guid, List<int>> serviceData;
+  final List<Guid> serviceUuids;
+  final int rssi;
 
-  // We use strings and not Guid because advertisement UUIDs can
-  // be 32-bit UUIDs, 64-bit, etc i.e. "FE56"
-  List<String> serviceUuids;
-
-  BmAdvertisementData({
-    required this.localName,
+  BmScanAdvertisement({
+    required this.remoteId,
+    required this.platformName,
+    required this.advName,
     required this.connectable,
     required this.txPowerLevel,
     required this.manufacturerData,
     required this.serviceData,
     required this.serviceUuids,
+    required this.rssi,
   });
 
-  factory BmAdvertisementData.fromMap(Map<dynamic, dynamic> json) {
+  factory BmScanAdvertisement.fromMap(Map<dynamic, dynamic> json) {
     // Get raw data
     var rawManufacturerData = json['manufacturer_data'] ?? {};
     var rawServiceData = json['service_data'] ?? {};
@@ -61,116 +133,57 @@ class BmAdvertisementData {
     }
 
     // Cast the data to the right type
-    Map<String, List<int>> serviceData = {};
+    Map<Guid, List<int>> serviceData = {};
     for (var key in rawServiceData.keys) {
-      serviceData[key] = _hexDecode(rawServiceData[key]);
+      serviceData[Guid(key)] = _hexDecode(rawServiceData[key]);
     }
 
     // Cast the data to the right type
-    // Note: we use strings and not Guid because advertisement UUIDs can
-    // be 32-bit UUIDs, 64-bit, etc i.e. "FE56"
-    List<String> serviceUuids = [];
+    List<Guid> serviceUuids = [];
     for (var val in rawServiceUuids) {
-      serviceUuids.add(val);
+      serviceUuids.add(Guid(val));
     }
 
-    // Construct the BmAdvertisementData
-    return BmAdvertisementData(
-      localName: json['local_name'],
-      connectable: json['connectable'] != 0,
+    return BmScanAdvertisement(
+      remoteId: json['remote_id'],
+      platformName: json['platform_name'],
+      advName: json['adv_name'],
+      connectable: json['connectable'] != null ? json['connectable'] != 0 : false,
       txPowerLevel: json['tx_power_level'],
       manufacturerData: manufacturerData,
       serviceData: serviceData,
       serviceUuids: serviceUuids,
-    );
-  }
-}
-
-class BmScanSettings {
-  final List<Guid> serviceUuids;
-  final List<String> macAddresses;
-  final bool allowDuplicates;
-  final int androidScanMode;
-  final bool androidUsesFineLocation;
-
-  BmScanSettings({
-    required this.serviceUuids,
-    required this.macAddresses,
-    required this.allowDuplicates,
-    required this.androidScanMode,
-    required this.androidUsesFineLocation,
-  });
-
-  Map<dynamic, dynamic> toMap() {
-    // Cast serviceUuid to strings
-    List<String> s = [];
-    for (var val in serviceUuids) {
-      s.add(val.toString());
-    }
-
-    final Map<dynamic, dynamic> data = {};
-    data['service_uuids'] = s;
-    data['mac_addresses'] = macAddresses;
-    data['allow_duplicates'] = allowDuplicates;
-    data['android_scan_mode'] = androidScanMode;
-    data['android_uses_fine_location'] = androidUsesFineLocation;
-    return data;
-  }
-}
-
-class BmScanFailed {
-  final bool success;
-  final int? errorCode;
-  final String? errorString;
-
-  BmScanFailed({
-    required this.success,
-    required this.errorCode,
-    required this.errorString,
-  });
-
-  factory BmScanFailed.fromMap(Map<dynamic, dynamic> json) {
-    return BmScanFailed(
-      success: json['success'] != 0,
-      errorCode: json['error_code'],
-      errorString: json['error_string'],
-    );
-  }
-}
-
-class BmScanResult {
-  final BmBluetoothDevice device;
-  final BmAdvertisementData advertisementData;
-  final int rssi;
-
-  BmScanResult({
-    required this.device,
-    required this.advertisementData,
-    required this.rssi,
-  });
-
-  factory BmScanResult.fromMap(Map<dynamic, dynamic> json) {
-    return BmScanResult(
-      device: BmBluetoothDevice.fromMap(json['device']),
-      advertisementData: BmAdvertisementData.fromMap(json['advertisement_data']),
-      rssi: json['rssi'],
+      rssi: json['rssi'] != null ? json['rssi'] : 0,
     );
   }
 }
 
 class BmScanResponse {
-  final BmScanResult? result;
-  final BmScanFailed? failed;
+  final List<BmScanAdvertisement> advertisements;
+  final bool success;
+  final int errorCode;
+  final String errorString;
 
   BmScanResponse({
-    required this.result,
-    required this.failed,
+    required this.advertisements,
+    required this.success,
+    required this.errorCode,
+    required this.errorString,
   });
 
   factory BmScanResponse.fromMap(Map<dynamic, dynamic> json) {
+    List<BmScanAdvertisement> advertisements = [];
+    for (var item in json['advertisements']) {
+      advertisements.add(BmScanAdvertisement.fromMap(item));
+    }
+
+    bool success = json['success'] == null || json['success'] == 0;
+
     return BmScanResponse(
-      result: json['result'] != null ? BmScanResult.fromMap(json['result']) : null,
-      failed: json['failed'] != null ? BmScanFailed.fromMap(json['failed']) : null,
+      advertisements: advertisements,
+      success: success,
+      errorCode: !success ? json['error_code'] : 0,
+      errorString: !success ? json['error_string'] : "",
     );
   }
 }
@@ -192,37 +205,50 @@ class BmConnectRequest {
   }
 }
 
-enum BmBluetoothSpecEnum {
-  unknown,
-  classic,
-  le,
-  dual,
-}
-
 class BmBluetoothDevice {
   String remoteId;
-  String? localName;
-  BmBluetoothSpecEnum type;
+  String? platformName;
 
   BmBluetoothDevice({
     required this.remoteId,
-    required this.localName,
-    required this.type,
+    required this.platformName,
   });
 
   Map<dynamic, dynamic> toMap() {
     final Map<dynamic, dynamic> data = {};
     data['remote_id'] = remoteId;
-    data['local_name'] = localName;
-    data['type'] = type.index;
+    data['platform_name'] = platformName;
     return data;
   }
 
   factory BmBluetoothDevice.fromMap(Map<dynamic, dynamic> json) {
     return BmBluetoothDevice(
       remoteId: json['remote_id'],
-      localName: json['local_name'],
-      type: BmBluetoothSpecEnum.values[json['type']],
+      platformName: json['platform_name'],
+    );
+  }
+}
+
+class BmNameChanged {
+  String remoteId;
+  String name;
+
+  BmNameChanged({
+    required this.remoteId,
+    required this.name,
+  });
+
+  Map<dynamic, dynamic> toMap() {
+    final Map<dynamic, dynamic> data = {};
+    data['remote_id'] = remoteId;
+    data['name'] = name;
+    return data;
+  }
+
+  factory BmNameChanged.fromMap(Map<dynamic, dynamic> json) {
+    return BmNameChanged(
+      remoteId: json['remote_id'],
+      name: json['name'],
     );
   }
 }
@@ -368,8 +394,8 @@ class BmDiscoverServicesResult {
   final String remoteId;
   final List<BmBluetoothService> services;
   final bool success;
-  final int? errorCode;
-  final String? errorString;
+  final int errorCode;
+  final String errorString;
 
   BmDiscoverServicesResult({
     required this.remoteId,
@@ -408,24 +434,24 @@ class BmReadCharacteristicRequest {
   Map<dynamic, dynamic> toMap() {
     final Map<dynamic, dynamic> data = {};
     data['remote_id'] = remoteId;
-    data['service_uuid'] = serviceUuid.toString();
-    data['secondary_service_uuid'] = secondaryServiceUuid?.toString();
-    data['characteristic_uuid'] = characteristicUuid.toString();
+    data['service_uuid'] = serviceUuid.str;
+    data['secondary_service_uuid'] = secondaryServiceUuid?.str;
+    data['characteristic_uuid'] = characteristicUuid.str;
     return data;
   }
 }
 
-class BmOnCharacteristicReceived {
+class BmCharacteristicData {
   final String remoteId;
   final Guid serviceUuid;
   final Guid? secondaryServiceUuid;
   final Guid characteristicUuid;
   final List<int> value;
   final bool success;
-  final int? errorCode;
-  final String? errorString;
+  final int errorCode;
+  final String errorString;
 
-  BmOnCharacteristicReceived({
+  BmCharacteristicData({
     required this.remoteId,
     required this.serviceUuid,
     required this.secondaryServiceUuid,
@@ -436,45 +462,13 @@ class BmOnCharacteristicReceived {
     required this.errorString,
   });
 
-  factory BmOnCharacteristicReceived.fromMap(Map<dynamic, dynamic> json) {
-    return BmOnCharacteristicReceived(
+  factory BmCharacteristicData.fromMap(Map<dynamic, dynamic> json) {
+    return BmCharacteristicData(
       remoteId: json['remote_id'],
       serviceUuid: Guid(json['service_uuid']),
       secondaryServiceUuid: json['secondary_service_uuid'] != null ? Guid(json['secondary_service_uuid']) : null,
       characteristicUuid: Guid(json['characteristic_uuid']),
       value: _hexDecode(json['value']),
-      success: json['success'] != 0,
-      errorCode: json['error_code'],
-      errorString: json['error_string'],
-    );
-  }
-}
-
-class BmOnCharacteristicWritten {
-  final String remoteId;
-  final Guid serviceUuid;
-  final Guid? secondaryServiceUuid;
-  final Guid characteristicUuid;
-  final bool success;
-  final int? errorCode;
-  final String? errorString;
-
-  BmOnCharacteristicWritten({
-    required this.remoteId,
-    required this.serviceUuid,
-    required this.secondaryServiceUuid,
-    required this.characteristicUuid,
-    required this.success,
-    required this.errorCode,
-    required this.errorString,
-  });
-
-  factory BmOnCharacteristicWritten.fromMap(Map<dynamic, dynamic> json) {
-    return BmOnCharacteristicWritten(
-      remoteId: json['remote_id'],
-      serviceUuid: Guid(json['service_uuid']),
-      secondaryServiceUuid: json['secondary_service_uuid'] != null ? Guid(json['secondary_service_uuid']) : null,
-      characteristicUuid: Guid(json['characteristic_uuid']),
       success: json['success'] != 0,
       errorCode: json['error_code'],
       errorString: json['error_string'],
@@ -500,10 +494,10 @@ class BmReadDescriptorRequest {
   Map<dynamic, dynamic> toMap() {
     final Map<dynamic, dynamic> data = {};
     data['remote_id'] = remoteId;
-    data['service_uuid'] = serviceUuid.toString();
-    data['secondary_service_uuid'] = secondaryServiceUuid?.toString();
-    data['characteristic_uuid'] = characteristicUuid.toString();
-    data['descriptor_uuid'] = descriptorUuid.toString();
+    data['service_uuid'] = serviceUuid.str;
+    data['secondary_service_uuid'] = secondaryServiceUuid?.str;
+    data['characteristic_uuid'] = characteristicUuid.str;
+    data['descriptor_uuid'] = descriptorUuid.str;
     return data;
   }
 }
@@ -542,9 +536,9 @@ class BmWriteCharacteristicRequest {
   Map<dynamic, dynamic> toMap() {
     final Map<dynamic, dynamic> data = {};
     data['remote_id'] = remoteId;
-    data['service_uuid'] = serviceUuid.toString();
-    data['secondary_service_uuid'] = secondaryServiceUuid?.toString();
-    data['characteristic_uuid'] = characteristicUuid.toString();
+    data['service_uuid'] = serviceUuid.str;
+    data['secondary_service_uuid'] = secondaryServiceUuid?.str;
+    data['characteristic_uuid'] = characteristicUuid.str;
     data['write_type'] = writeType.index;
     data['allow_long_write'] = allowLongWrite ? 1 : 0;
     data['value'] = _hexEncode(value);
@@ -573,16 +567,16 @@ class BmWriteDescriptorRequest {
   Map<dynamic, dynamic> toMap() {
     final Map<dynamic, dynamic> data = {};
     data['remote_id'] = remoteId;
-    data['service_uuid'] = serviceUuid.toString();
-    data['secondary_service_uuid'] = secondaryServiceUuid?.toString();
-    data['characteristic_uuid'] = characteristicUuid.toString();
-    data['descriptor_uuid'] = descriptorUuid.toString();
+    data['service_uuid'] = serviceUuid.str;
+    data['secondary_service_uuid'] = secondaryServiceUuid?.str;
+    data['characteristic_uuid'] = characteristicUuid.str;
+    data['descriptor_uuid'] = descriptorUuid.str;
     data['value'] = _hexEncode(value);
     return data;
   }
 }
 
-class BmOnDescriptorRead {
+class BmDescriptorData {
   final String remoteId;
   final Guid serviceUuid;
   final Guid? secondaryServiceUuid;
@@ -590,10 +584,10 @@ class BmOnDescriptorRead {
   final Guid descriptorUuid;
   final List<int> value;
   final bool success;
-  final int? errorCode;
-  final String? errorString;
+  final int errorCode;
+  final String errorString;
 
-  BmOnDescriptorRead({
+  BmDescriptorData({
     required this.remoteId,
     required this.serviceUuid,
     required this.secondaryServiceUuid,
@@ -605,8 +599,8 @@ class BmOnDescriptorRead {
     required this.errorString,
   });
 
-  factory BmOnDescriptorRead.fromMap(Map<dynamic, dynamic> json) {
-    return BmOnDescriptorRead(
+  factory BmDescriptorData.fromMap(Map<dynamic, dynamic> json) {
+    return BmDescriptorData(
       remoteId: json['remote_id'],
       serviceUuid: Guid(json['service_uuid']),
       secondaryServiceUuid: json['secondary_service_uuid'] != null ? Guid(json['secondary_service_uuid']) : null,
@@ -620,62 +614,30 @@ class BmOnDescriptorRead {
   }
 }
 
-class BmOnDescriptorWrite {
+class BmSetNotifyValueRequest {
   final String remoteId;
   final Guid serviceUuid;
   final Guid? secondaryServiceUuid;
   final Guid characteristicUuid;
-  final Guid descriptorUuid;
-  final bool success;
-  final int? errorCode;
-  final String? errorString;
-
-  BmOnDescriptorWrite({
-    required this.remoteId,
-    required this.serviceUuid,
-    required this.secondaryServiceUuid,
-    required this.characteristicUuid,
-    required this.descriptorUuid,
-    required this.success,
-    required this.errorCode,
-    required this.errorString,
-  });
-
-  factory BmOnDescriptorWrite.fromMap(Map<dynamic, dynamic> json) {
-    return BmOnDescriptorWrite(
-      remoteId: json['remote_id'],
-      serviceUuid: Guid(json['service_uuid']),
-      secondaryServiceUuid: json['secondary_service_uuid'] != null ? Guid(json['secondary_service_uuid']) : null,
-      characteristicUuid: Guid(json['characteristic_uuid']),
-      descriptorUuid: Guid(json['descriptor_uuid']),
-      success: json['success'] != 0,
-      errorCode: json['error_code'],
-      errorString: json['error_string'],
-    );
-  }
-}
-
-class BmSetNotificationRequest {
-  final String remoteId;
-  final Guid serviceUuid;
-  final Guid? secondaryServiceUuid;
-  final Guid characteristicUuid;
+  final bool forceIndications;
   final bool enable;
 
-  BmSetNotificationRequest({
+  BmSetNotifyValueRequest({
     required this.remoteId,
     required this.serviceUuid,
     required this.secondaryServiceUuid,
     required this.characteristicUuid,
+    required this.forceIndications,
     required this.enable,
   });
 
   Map<dynamic, dynamic> toMap() {
     final Map<dynamic, dynamic> data = {};
     data['remote_id'] = remoteId;
-    data['service_uuid'] = serviceUuid.toString();
-    data['secondary_service_uuid'] = secondaryServiceUuid?.toString();
-    data['characteristic_uuid'] = characteristicUuid.toString();
+    data['service_uuid'] = serviceUuid.str;
+    data['secondary_service_uuid'] = secondaryServiceUuid?.str;
+    data['characteristic_uuid'] = characteristicUuid.str;
+    data['force_indications'] = forceIndications;
     data['enable'] = enable;
     return data;
   }
@@ -709,18 +671,18 @@ class BmConnectionStateResponse {
   }
 }
 
-class BmConnectedDevicesResponse {
+class BmDevicesList {
   final List<BmBluetoothDevice> devices;
 
-  BmConnectedDevicesResponse({required this.devices});
+  BmDevicesList({required this.devices});
 
-  factory BmConnectedDevicesResponse.fromMap(Map<dynamic, dynamic> json) {
+  factory BmDevicesList.fromMap(Map<dynamic, dynamic> json) {
     // convert to BmBluetoothDevice
     List<BmBluetoothDevice> devices = [];
     for (var i = 0; i < json['devices'].length; i++) {
       devices.add(BmBluetoothDevice.fromMap(json['devices'][i]));
     }
-    return BmConnectedDevicesResponse(devices: devices);
+    return BmDevicesList(devices: devices);
   }
 }
 
@@ -742,8 +704,8 @@ class BmMtuChangedResponse {
   final String remoteId;
   final int mtu;
   final bool success;
-  final int? errorCode;
-  final String? errorString;
+  final int errorCode;
+  final String errorString;
 
   BmMtuChangedResponse({
     required this.remoteId,
@@ -768,8 +730,8 @@ class BmReadRssiResult {
   final String remoteId;
   final int rssi;
   final bool success;
-  final int? errorCode;
-  final String? errorString;
+  final int errorCode;
+  final String errorString;
 
   BmReadRssiResult({
     required this.remoteId,
@@ -854,22 +816,19 @@ enum BmBondStateEnum {
 class BmBondStateResponse {
   final String remoteId;
   final BmBondStateEnum bondState;
-  final bool bondFailed; // only possible when bondState.none
-  final bool bondLost; // only possible when bondState.none
+  final BmBondStateEnum? prevState;
 
   BmBondStateResponse({
     required this.remoteId,
     required this.bondState,
-    required this.bondFailed,
-    required this.bondLost,
+    required this.prevState,
   });
 
   factory BmBondStateResponse.fromMap(Map<dynamic, dynamic> json) {
     return BmBondStateResponse(
       remoteId: json['remote_id'],
       bondState: BmBondStateEnum.values[json['bond_state']],
-      bondFailed: json['bond_failed'],
-      bondLost: json['bond_lost'],
+      prevState: json['prev_state'] != null ? BmBondStateEnum.values[json['prev_state']] : null,
     );
   }
 }

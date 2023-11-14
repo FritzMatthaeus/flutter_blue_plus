@@ -4,6 +4,19 @@ String _hexEncode(List<int> numbers) {
   return numbers.map((n) => (n & 0xFF).toRadixString(16).padLeft(2, '0')).join();
 }
 
+List<int>? _tryHexDecode(String hex) {
+  List<int> numbers = [];
+  for (int i = 0; i < hex.length; i += 2) {
+    String hexPart = hex.substring(i, i + 2);
+    int? num = int.tryParse(hexPart, radix: 16);
+    if (num == null) {
+      return null;
+    }
+    numbers.add(num);
+  }
+  return numbers;
+}
+
 List<int> _hexDecode(String hex) {
   List<int> numbers = [];
   for (int i = 0; i < hex.length; i += 2) {
@@ -41,6 +54,7 @@ int _compareAsciiLowerCase(String a, String b) {
 }
 
 extension AddOrUpdate<T> on List<T> {
+  /// add an item to a list, or update item if it already exists
   void addOrUpdate(T item) {
     final index = indexOf(item);
     if (index != -1) {
@@ -52,11 +66,73 @@ extension AddOrUpdate<T> on List<T> {
 }
 
 extension FutureTimeout<T> on Future<T> {
-  Future<T> fbpTimeout(int seconds, String errorName) {
+  Future<T> fbpTimeout(int seconds, String function) {
     return this.timeout(Duration(seconds: seconds), onTimeout: () {
       throw FlutterBluePlusException(
-          ErrorPlatform.dart, errorName, FbpErrorCode.timeout.index, "Timed out after ${seconds}s");
+          ErrorPlatform.fbp, function, FbpErrorCode.timeout.index, "Timed out after ${seconds}s");
     });
+  }
+
+  Future<T> fbpEnsureDeviceIsConnected(BluetoothDevice device, String function) {
+    // Create a completer to represent the result of this extended Future.
+    var completer = Completer<T>();
+
+    // disconnection listener.
+    var subscription = device.connectionState.listen((event) {
+      if (event == BluetoothConnectionState.disconnected) {
+        if (!completer.isCompleted) {
+          completer.completeError(FlutterBluePlusException(
+              ErrorPlatform.fbp, function, FbpErrorCode.deviceIsDisconnected.index, "Device is disconnected"));
+        }
+      }
+    });
+
+    // When the original future completes
+    // complete our completer and cancel the subscription.
+    this.then((value) {
+      if (!completer.isCompleted) {
+        subscription.cancel();
+        completer.complete(value);
+      }
+    }).catchError((error) {
+      if (!completer.isCompleted) {
+        subscription.cancel();
+        completer.completeError(error);
+      }
+    });
+
+    return completer.future;
+  }
+
+  Future<T> fbpEnsureAdapterIsOn(String function) {
+    // Create a completer to represent the result of this extended Future.
+    var completer = Completer<T>();
+
+    // disconnection listener.
+    var subscription = FlutterBluePlus.adapterState.listen((event) {
+      if (event == BluetoothAdapterState.off || event == BluetoothAdapterState.turningOff) {
+        if (!completer.isCompleted) {
+          completer.completeError(FlutterBluePlusException(
+              ErrorPlatform.fbp, function, FbpErrorCode.adapterIsOff.index, "Bluetooth adapter is off"));
+        }
+      }
+    });
+
+    // When the original future completes
+    // complete our completer and cancel the subscription.
+    this.then((value) {
+      if (!completer.isCompleted) {
+        subscription.cancel();
+        completer.complete(value);
+      }
+    }).catchError((error) {
+      if (!completer.isCompleted) {
+        subscription.cancel();
+        completer.completeError(error);
+      }
+    });
+
+    return completer.future;
   }
 }
 
@@ -71,7 +147,13 @@ class _StreamController<T> {
 
   _StreamController({required T initialValue}) : this.latestValue = initialValue;
 
-  Stream<T> get stream => _controller.stream;
+  Stream<T> get stream {
+    if (latestValue != null) {
+      return _controller.stream.newStreamWithInitialValue(latestValue!);
+    } else {
+      return _controller.stream;
+    }
+  }
 
   T get value => latestValue;
 
@@ -138,143 +220,6 @@ class _BufferStream<T> {
   }
 }
 
-// helper for 'doOnDone' method for streams.
-class _OnDoneTransformer<T> extends StreamTransformerBase<T, T> {
-  final Function onDone;
-
-  _OnDoneTransformer({required this.onDone});
-
-  @override
-  Stream<T> bind(Stream<T> stream) {
-    if (stream.isBroadcast) {
-      return _bindBroadcast(stream);
-    }
-    return _bindSingleSubscription(stream);
-  }
-
-  Stream<T> _bindSingleSubscription(Stream<T> stream) {
-    StreamController<T>? controller;
-    StreamSubscription<T>? subscription;
-
-    controller = StreamController<T>(
-      onListen: () {
-        subscription = stream.listen(
-          controller?.add,
-          onError: controller?.addError,
-          onDone: () {
-            onDone();
-            controller?.close();
-          },
-        );
-      },
-      onPause: ([Future<dynamic>? resumeSignal]) {
-        subscription?.pause(resumeSignal);
-      },
-      onResume: () {
-        subscription?.resume();
-      },
-      onCancel: () {
-        return subscription?.cancel();
-      },
-      sync: true,
-    );
-
-    return controller.stream;
-  }
-
-  Stream<T> _bindBroadcast(Stream<T> stream) {
-    StreamController<T>? controller;
-    StreamSubscription<T>? subscription;
-
-    controller = StreamController<T>.broadcast(
-      onListen: () {
-        subscription = stream.listen(controller?.add, onError: controller?.addError, onDone: () {
-          onDone();
-          controller?.close();
-        });
-      },
-      onCancel: () {
-        subscription?.cancel();
-      },
-      sync: true,
-    );
-
-    return controller.stream;
-  }
-}
-
-// helper for 'doOnCancel' method for streams.
-class _OnCancelTransformer<T> extends StreamTransformerBase<T, T> {
-  final Function onCancel;
-
-  _OnCancelTransformer({required this.onCancel});
-
-  @override
-  Stream<T> bind(Stream<T> stream) {
-    if (stream.isBroadcast) {
-      return _bindBroadcast(stream);
-    }
-
-    return _bindSingleSubscription(stream);
-  }
-
-  Stream<T> _bindSingleSubscription(Stream<T> stream) {
-    StreamController<T>? controller;
-    StreamSubscription<T>? subscription;
-
-    controller = StreamController<T>(
-      onListen: () {
-        subscription = stream.listen(
-          controller?.add,
-          onError: (Object error) {
-            controller?.addError(error);
-            controller?.close();
-          },
-          onDone: controller?.close,
-        );
-      },
-      onPause: ([Future<dynamic>? resumeSignal]) {
-        subscription?.pause(resumeSignal);
-      },
-      onResume: () {
-        subscription?.resume();
-      },
-      onCancel: () {
-        onCancel();
-        return subscription?.cancel();
-      },
-      sync: true,
-    );
-
-    return controller.stream;
-  }
-
-  Stream<T> _bindBroadcast(Stream<T> stream) {
-    StreamController<T>? controller;
-    StreamSubscription<T>? subscription;
-
-    controller = StreamController<T>.broadcast(
-      onListen: () {
-        subscription = stream.listen(
-          controller?.add,
-          onError: (Object error) {
-            controller?.addError(error);
-            controller?.close();
-          },
-          onDone: controller?.close,
-        );
-      },
-      onCancel: () {
-        onCancel();
-        subscription?.cancel();
-      },
-      sync: true,
-    );
-
-    return controller.stream;
-  }
-}
-
 // Helper for 'newStreamWithInitialValue' method for streams.
 class _NewStreamWithInitialValueTransformer<T> extends StreamTransformerBase<T, T> {
   final T initialValue;
@@ -283,10 +228,14 @@ class _NewStreamWithInitialValueTransformer<T> extends StreamTransformerBase<T, 
 
   @override
   Stream<T> bind(Stream<T> stream) {
-    return _bindSingleSubscription(stream);
+    if (stream.isBroadcast) {
+      return _bind(stream).asBroadcastStream();
+    } else {
+      return _bind(stream);
+    }
   }
 
-  Stream<T> _bindSingleSubscription(Stream<T> stream) {
+  Stream<T> _bind(Stream<T> stream) {
     StreamController<T>? controller;
     StreamSubscription<T>? subscription;
 
@@ -317,20 +266,6 @@ class _NewStreamWithInitialValueTransformer<T> extends StreamTransformerBase<T, 
     );
 
     return controller.stream;
-  }
-}
-
-extension _StreamDoOnDone<T> on Stream<T> {
-  // ignore: unused_element
-  Stream<T> doOnDone(void Function() onDone) {
-    return transform(_OnDoneTransformer(onDone: onDone));
-  }
-}
-
-extension _StreamDoOnCancel<T> on Stream<T> {
-  // ignore: unused_element
-  Stream<T> doOnCancel(void Function() onCancel) {
-    return transform(_OnCancelTransformer(onCancel: onCancel));
   }
 }
 
@@ -381,21 +316,23 @@ Stream<T> _mergeStreams<T>(List<Stream<T>> streams) {
 // this mutex lets a single task through at a time.
 class _Mutex {
   final StreamController _controller = StreamController.broadcast();
-  int current = 0;
+  int execute = 0;
   int issued = 0;
 
-  Future<void> take() async {
+  Future<bool> take() async {
     int mine = issued;
     issued++;
     // tasks are executed in the same order they call take()
-    while (mine != current) {
+    while (mine != execute) {
       await _controller.stream.first; // wait
     }
+    return true;
   }
 
-  void give() {
-    current++;
+  bool give() {
+    execute++;
     _controller.add(null); // release waiting tasks
+    return false;
   }
 }
 
@@ -438,6 +375,7 @@ String _brown(String s) {
 }
 
 extension FirstWhereOrNullExtension<T> on Iterable<T> {
+  /// returns first item to satisfy `test`, else null
   T? _firstWhereOrNull(bool Function(T) test) {
     for (var element in this) {
       if (test(element)) {
@@ -448,4 +386,11 @@ extension FirstWhereOrNullExtension<T> on Iterable<T> {
   }
 }
 
-
+extension RemoveWhere<T> on List<T> {
+  /// returns true if some items where removed
+  bool _removeWhere(bool Function(T) test) {
+    int initialLength = this.length;
+    this.removeWhere(test);
+    return this.length != initialLength;
+  }
+}
