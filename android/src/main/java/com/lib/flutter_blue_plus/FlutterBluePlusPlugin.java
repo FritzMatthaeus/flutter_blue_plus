@@ -835,6 +835,7 @@ public class FlutterBluePlusPlugin implements
                     String value =                (String) data.get("value");
                     int writeTypeInt =               (int) data.get("write_type");
                     boolean allowLongWrite =        ((int) data.get("allow_long_write")) != 0;
+                    int ignoreMtuRestriction =       (int) data.get("ignore_mtu_restriction"); // 0 = false, 1 = true
 
                     int writeType = writeTypeInt == 0 ?
                         BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT :
@@ -874,15 +875,17 @@ public class FlutterBluePlusPlugin implements
                         }
                     }
 
-                    // check maximum payload
-                    int maxLen = getMaxPayload(remoteId, writeType, allowLongWrite);
-                    int dataLen = hexToBytes(value).length;
-                    if (dataLen > maxLen) {
-                        String a = writeTypeInt == 0 ? "withResponse" : "withoutResponse";
-                        String b = writeTypeInt == 0 ? (allowLongWrite ? ", allowLongWrite" : ", noLongWrite") : "";
-                        String str = "data longer than allowed. dataLen: " + dataLen + " > max: " + maxLen + " (" + a + b +")";
-                        result.error("writeCharacteristic", str, null);
-                        break;
+                    // check maximum payload if not ignored
+                    if (ignoreMtuRestriction == 0) {
+                        int maxLen = getMaxPayload(remoteId, writeType, allowLongWrite);
+                        int dataLen = hexToBytes(value).length;
+                        if (dataLen > maxLen) {
+                            String a = writeTypeInt == 0 ? "withResponse" : "withoutResponse";
+                            String b = writeTypeInt == 0 ? (allowLongWrite ? ", allowLongWrite" : ", noLongWrite") : "";
+                            String str = "data longer than allowed. dataLen: " + dataLen + " > max: " + maxLen + " (" + a + b +")";
+                            result.error("writeCharacteristic", str, null);
+                            break;
+                        }
                     }
 
                     // remember the data we are writing
