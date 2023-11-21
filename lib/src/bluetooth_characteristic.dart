@@ -101,7 +101,7 @@ class BluetoothCharacteristic {
     }
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     // return value
@@ -179,7 +179,7 @@ class BluetoothCharacteristic {
     }
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     try {
@@ -247,7 +247,7 @@ class BluetoothCharacteristic {
     }
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     try {
@@ -300,9 +300,11 @@ class BluetoothCharacteristic {
   BmBluetoothCharacteristic? get _bmchr {
     if (FlutterBluePlus._knownServices[remoteId] != null) {
       for (var s in FlutterBluePlus._knownServices[remoteId]!.services) {
-        for (var c in s.characteristics) {
-          if (c.characteristicUuid == uuid) {
-            return c;
+        if (s.serviceUuid == serviceUuid) {
+          for (var c in s.characteristics) {
+            if (c.characteristicUuid == uuid) {
+              return c;
+            }
           }
         }
       }

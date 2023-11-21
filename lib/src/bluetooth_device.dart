@@ -20,10 +20,11 @@ class BluetoothDevice {
   BluetoothDevice.fromId(String remoteId) : remoteId = DeviceIdentifier(remoteId);
 
   /// platform name
-  /// - this is the device name that is kept track of by the platform
+  /// - this name is kept track of by the platform
   /// - this name usually persist between app restarts
-  /// - iOS: uses GAP name characteristic 0x2A00 if it exists, otherwise advertised name
-  /// - Android: always uses advertised name
+  /// - iOS: after you connect, iOS uses the GAP name characteristic (0x2A00)
+  ///        if it exists. Otherwise iOS use the advertised name.
+  /// - Android: always uses the advertised name
   String get platformName => FlutterBluePlus._platformNames[remoteId] ?? "";
 
   /// Advertised Named
@@ -92,11 +93,11 @@ class BluetoothDevice {
     int? mtu = 512,
   }) async {
     // make sure no one else is calling disconnect
-    _Mutex dmtx = await _MutexFactory.getMutexForKey("disconnect");
+    _Mutex dmtx = _MutexFactory.getMutexForKey("disconnect");
     bool dtook = await dmtx.take();
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     try {
@@ -164,11 +165,11 @@ class BluetoothDevice {
   ///     of the fbp operation queue, which is useful to cancel an in-progress connection attempt.
   Future<void> disconnect({int timeout = 35, bool queue = true}) async {
     // Only allow a single disconnect operation at a time
-    _Mutex dtx = await _MutexFactory.getMutexForKey("disconnect");
+    _Mutex dtx = _MutexFactory.getMutexForKey("disconnect");
     await dtx.take();
 
     // Only allow a single ble operation to be underway at a time?
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     if (queue) {
       await mtx.take();
     }
@@ -208,7 +209,7 @@ class BluetoothDevice {
     }
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     List<BluetoothService> result = [];
@@ -323,7 +324,7 @@ class BluetoothDevice {
     }
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     int rssi = 0;
@@ -374,7 +375,7 @@ class BluetoothDevice {
     }
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     var mtu = 0;
@@ -481,7 +482,7 @@ class BluetoothDevice {
     }
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     try {
@@ -524,7 +525,7 @@ class BluetoothDevice {
     }
 
     // Only allow a single ble operation to be underway at a time
-    _Mutex mtx = await _MutexFactory.getMutexForKey("global");
+    _Mutex mtx = _MutexFactory.getMutexForKey("global");
     await mtx.take();
 
     try {

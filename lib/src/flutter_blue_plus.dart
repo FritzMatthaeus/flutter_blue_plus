@@ -33,7 +33,7 @@ class FlutterBluePlus {
   static final _isScanning = _StreamController<bool>(initialValue: false);
 
   /// stream used for the scanResults public api
-  static final _scanResultsList = _StreamController<List<ScanResult>>(initialValue: []);
+  static final _scanResults = _StreamController<List<ScanResult>>(initialValue: []);
 
   /// the subscription to the scan results stream
   static StreamSubscription<BmScanResponse?>? _scanSubscription;
@@ -66,24 +66,55 @@ class FlutterBluePlus {
   /// are we scanning right now?
   static bool get isScanningNow => _isScanning.latestValue;
 
-  /// Returns a stream of List<ScanResult> results while a scan is in progress.
-  /// - The list contains all the results since the scan started.
-  /// - The returned stream is never closed.
-  static Stream<List<ScanResult>> get scanResults => _scanResultsList.stream;
+  /// the most recent scan results
+  static List<ScanResult> get lastScanResults => _scanResults.latestValue;
+
+  /// a stream of scan results
+  /// - if you re-listen to the stream it re-emits the previous results
+  /// - the list contains all the results since the scan started
+  /// - the returned stream is never closed.
+  static Stream<List<ScanResult>> get scanResults => _scanResults.stream;
+
+  /// This is the same as scanResults, except:
+  /// - it *does not* re-emit previous results after scanning stops.
+  static Stream<List<ScanResult>> get onScanResults {
+    if (isScanningNow) {
+      return _scanResults.stream;
+    } else {
+      // skip previous results & push empty list
+      return _scanResults.stream.skip(1).newStreamWithInitialValue([]);
+    }
+  }
 
   /// Get access to all device event streams
   static final BluetoothEvents events = BluetoothEvents();
 
   /// Turn on Bluetooth (Android only),
   static Future<void> turnOn({int timeout = 60}) async {
+    var responseStream = FlutterBluePlus._methodStream.stream
+        .where((m) => m.method == "OnTurnOnResponse")
+        .map((m) => m.arguments)
+        .map((args) => BmTurnOnResponse.fromMap(args));
+
     // Start listening now, before invokeMethod, to ensure we don't miss the response
-    Future<BluetoothAdapterState> futureResponse = adapterState.where((s) => s == BluetoothAdapterState.on).first;
+    Future<BmTurnOnResponse> futureResponse = responseStream.first;
 
     // invoke
-    await _invokeMethod('turnOn');
+    bool changed = await _invokeMethod('turnOn');
 
-    // wait for response
-    await futureResponse.fbpTimeout(timeout, "turnOn");
+    // only wait if bluetooth was off
+    if (changed) {
+      // wait for response
+      BmTurnOnResponse response = await futureResponse.fbpTimeout(timeout, "turnOn");
+
+      // check response
+      if (response.userAccepted == false) {
+        throw FlutterBluePlusException(ErrorPlatform.fbp, "turnOn", FbpErrorCode.userRejected.index, "user rejected");
+      }
+
+      // wait for adapter to turn on
+      await adapterState.where((s) => s == BluetoothAdapterState.on).first.fbpTimeout(timeout, "turnOn");
+    }
   }
 
   /// Gets the current state of the Bluetooth module
@@ -228,7 +259,7 @@ class FlutterBluePlus {
         : _scanBuffer.stream;
 
     // start by pushing an empty array
-    _scanResultsList.add([]);
+    _scanResults.add([]);
 
     List<ScanResult> output = [];
 
@@ -237,7 +268,7 @@ class FlutterBluePlus {
       if (response == null) {
         // if null, this is just a periodic update to remove old results
         if (output._removeWhere((elm) => DateTime.now().difference(elm.timeStamp) > removeIfGone!)) {
-          _scanResultsList.add(List.from(output)); // push to stream
+          _scanResults.add(List.from(output)); // push to stream
         }
       } else {
         // failure?
@@ -262,7 +293,7 @@ class FlutterBluePlus {
 
           if (oneByOne) {
             // push single item
-            _scanResultsList.add([sr]);
+            _scanResults.add([sr]);
           } else {
             // add result to output
             output.addOrUpdate(sr);
@@ -271,7 +302,7 @@ class FlutterBluePlus {
 
         // push entire list
         if (!oneByOne) {
-          _scanResultsList.add(List.from(output));
+          _scanResults.add(List.from(output));
         }
       }
     });
@@ -292,7 +323,6 @@ class FlutterBluePlus {
   static Future<void> _stopScan({bool invokePlatform = true, bool pushToStream = true}) async {
     _scanSubscription?.cancel();
     _scanTimeout?.cancel();
-    _scanResultsList.latestValue = [];
     if (pushToStream) {
       _isScanning.add(false);
     }
@@ -449,7 +479,7 @@ class FlutterBluePlus {
     dynamic out;
 
     // only allow 1 invocation at a time (guarentees that hot restart finishes)
-    _Mutex mtx = await _MutexFactory.getMutexForKey("invokeMethod");
+    _Mutex mtx = _MutexFactory.getMutexForKey("invokeMethod");
     await mtx.take();
 
     try {
@@ -718,6 +748,7 @@ enum FbpErrorCode {
   characteristicNotFound,
   adapterIsOff,
   connectionCanceled,
+  userRejected
 }
 
 class FlutterBluePlusException implements Exception {

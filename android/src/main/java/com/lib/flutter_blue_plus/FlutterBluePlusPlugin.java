@@ -6,6 +6,7 @@ package com.lib.flutter_blue_plus;
 
 import android.Manifest;
 import android.annotation.TargetApi;
+import android.app.Activity;
 import android.app.Application;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -72,11 +73,13 @@ import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.RequestPermissionsResultListener;
+import io.flutter.plugin.common.PluginRegistry.ActivityResultListener;
 
 public class FlutterBluePlusPlugin implements
     FlutterPlugin,
     MethodCallHandler,
     RequestPermissionsResultListener,
+    ActivityResultListener,
     ActivityAware
 {
     private static final String TAG = "[FBP-Android]";
@@ -158,7 +161,7 @@ public class FlutterBluePlusPlugin implements
         else if (ends) 
         {
             // 32-bit
-            return s.substring(0,8);
+                return s.substring(0,8);
         } 
         else 
         {
@@ -223,6 +226,7 @@ public class FlutterBluePlusPlugin implements
         log(LogLevel.DEBUG, "onAttachedToActivity");
         activityBinding = binding;
         activityBinding.addRequestPermissionsResultListener(this);
+        activityBinding.addActivityResultListener(this);
     }
 
     @Override
@@ -398,7 +402,7 @@ public class FlutterBluePlusPlugin implements
                         }
 
                         if (mBluetoothAdapter.isEnabled()) {
-                            result.success(true); // no work to do
+                            result.success(false); // no work to do
                             return;
                         }
 
@@ -541,14 +545,16 @@ public class FlutterBluePlusPlugin implements
                         }
 
                         // keywords
-                        if (withKeywords.size() > 0) {
-                            // device must advertise a name
-                            int a1 = ScanRecord.DATA_TYPE_LOCAL_NAME_SHORT;
-                            int a2 = ScanRecord.DATA_TYPE_LOCAL_NAME_COMPLETE;
-                            ScanFilter f1 = new ScanFilter.Builder().setAdvertisingDataType(a1).build();
-                            ScanFilter f2 = new ScanFilter.Builder().setAdvertisingDataType(a2).build();
-                            filters.add(f1);
-                            filters.add(f2);
+                        if (Build.VERSION.SDK_INT >= 33) { // Android 13 (August 2022)
+                            if (withKeywords.size() > 0) {
+                                // device must advertise a name
+                                int a1 = ScanRecord.DATA_TYPE_LOCAL_NAME_SHORT;
+                                int a2 = ScanRecord.DATA_TYPE_LOCAL_NAME_COMPLETE;
+                                ScanFilter f1 = new ScanFilter.Builder().setAdvertisingDataType(a1).build();
+                                ScanFilter f2 = new ScanFilter.Builder().setAdvertisingDataType(a2).build();
+                                filters.add(f1);
+                                filters.add(f2);
+                            }
                         }
 
                         // msd
@@ -1427,6 +1433,36 @@ public class FlutterBluePlusPlugin implements
         }
     }
 
+   //////////////////////////////////////////////////////////////////////
+   //  █████    ██████  ████████  ██  ██    ██  ██  ████████  ██    ██ 
+   // ██   ██  ██          ██     ██  ██    ██  ██     ██      ██  ██  
+   // ███████  ██          ██     ██  ██    ██  ██     ██       ████   
+   // ██   ██  ██          ██     ██   ██  ██   ██     ██        ██    
+   // ██   ██   ██████     ██     ██    ████    ██     ██        ██    
+   // 
+   // ██████   ███████  ███████  ██    ██  ██       ████████ 
+   // ██   ██  ██       ██       ██    ██  ██          ██    
+   // ██████   █████    ███████  ██    ██  ██          ██    
+   // ██   ██  ██            ██  ██    ██  ██          ██    
+   // ██   ██  ███████  ███████   ██████   ███████     ██    
+
+    @Override
+    public boolean onActivityResult(int requestCode, int resultCode, Intent data)
+    {
+        if (requestCode == enableBluetoothRequestCode) {
+
+            // see: BmTurnOnResponse
+            HashMap<String, Object> map = new HashMap<>();
+            map.put("user_accepted", resultCode == Activity.RESULT_OK);
+
+            invokeMethodUIThread("OnTurnOnResponse", map);
+
+            return true;
+        }
+
+        return false; // did not handle anything
+    }
+
     //////////////////////////////////////////////////////////////////////////////////////
     // ██████   ███████  ██████   ███    ███  ██  ███████  ███████  ██   ██████   ███    ██
     // ██   ██  ██       ██   ██  ████  ████  ██  ██       ██       ██  ██    ██  ████   ██
@@ -1725,7 +1761,7 @@ public class FlutterBluePlusPlugin implements
 
             invokeMethodUIThread("OnAdapterStateChanged", map);
         }
-    };
+    };   
 
     /////////////////////////////////////////////////////////////////////////////////////
     // ██████    ██████   ███    ██  ██████
@@ -2021,7 +2057,7 @@ public class FlutterBluePlusPlugin implements
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, byte[] value)
         {
             // this callback is only for notifications & indications
-            log(LogLevel.DEBUG, "onCharacteristicChanged: uuid: " + uuidStr(characteristic.getUuid()));
+            log(LogLevel.DEBUG, "onCharacteristicChanged: " + uuidStr(characteristic.getUuid()));
             onCharacteristicReceived(gatt, characteristic, value, BluetoothGatt.GATT_SUCCESS);
         }
 
@@ -2030,14 +2066,14 @@ public class FlutterBluePlusPlugin implements
         public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, byte[] value, int status)
         {
             // this callback is only for explicit characteristic reads
-            log(LogLevel.DEBUG, "onCharacteristicRead: uuid: " + uuidStr(characteristic.getUuid()) + " status: " + status);
+            log(LogLevel.DEBUG, "onCharacteristicRead: " + uuidStr(characteristic.getUuid()) + " status: " + status);
             onCharacteristicReceived(gatt, characteristic, value, BluetoothGatt.GATT_SUCCESS);
         }
 
         @Override
         public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status)
         {
-            log(LogLevel.DEBUG, "onCharacteristicWrite: uuid: " + uuidStr(characteristic.getUuid()) + " status: " + status);
+            log(LogLevel.DEBUG, "onCharacteristicWrite: " + uuidStr(characteristic.getUuid()) + " status: " + status);
 
             // For "writeWithResponse", onCharacteristicWrite is called after the remote sends back a write response. 
             // For "writeWithoutResponse", onCharacteristicWrite is called as long as there is still space left 
@@ -2077,7 +2113,7 @@ public class FlutterBluePlusPlugin implements
         @TargetApi(33) // newer function, passes byte[] value
         public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status, byte[] value)
         {
-            log(LogLevel.DEBUG, "onDescriptorRead: uuid: " + uuidStr(descriptor.getUuid()) + " status: " + status);
+            log(LogLevel.DEBUG, "onDescriptorRead: " + uuidStr(descriptor.getUuid()) + " status: " + status);
 
             ServicePair pair = getServicePair(gatt, descriptor.getCharacteristic());
 
@@ -2101,7 +2137,7 @@ public class FlutterBluePlusPlugin implements
         @Override
         public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status)
         {
-            log(LogLevel.DEBUG, "onDescriptorWrite: uuid: " + uuidStr(descriptor.getUuid()) + " status: " + status);
+            log(LogLevel.DEBUG, "onDescriptorWrite: " + uuidStr(descriptor.getUuid()) + " status: " + status);
 
             ServicePair pair = getServicePair(gatt, descriptor.getCharacteristic());
 

@@ -94,12 +94,12 @@ Setting `LogLevel.verbose` shows *all* data in and out.
 <img width="600" alt="Screenshot 2023-07-27 at 4 53 08 AM" src="https://github.com/boskokg/flutter_blue_plus/assets/1863934/ee37d702-2752-4402-bf26-fc661728c1c3">
 
 
-### Enable Bluetooth
+### Bluetooth On & Off
 
 **Note:** On iOS, a "*This app would like to use Bluetooth*" system dialogue appears on first call to any FlutterBluePlus method. 
  
 ```dart
-// check if bluetooth is supported by your hardware
+// first, check if bluetooth is supported by your hardware
 // Note: The platform is initialized on the first call to any FlutterBluePlus method.
 if (await FlutterBluePlus.isSupported == false) {
     print("Bluetooth not supported by this device");
@@ -132,8 +132,10 @@ If your device is not found, see [Common Problems](#common-problems).
 It is recommended to set scan filters to reduce main thread & platform channel usage.
 
 ```dart
-// Setup Listener for scan results.
-var subscription = FlutterBluePlus.scanResults.listen((results) {
+// listen to scan results
+// Note: `onScanResults` only returns live scan results, i.e. during scanning
+// Use: `scanResults` if you want live scan results *or* the previous results
+var subscription = FlutterBluePlus.onScanResults.listen((results) {
         if (results.isNotEmpty) {
             ScanResult r = results.last; // the most recently found device
             print('${r.device.remoteId}: "${r.advertisementData.advName}" found!');
@@ -141,6 +143,10 @@ var subscription = FlutterBluePlus.scanResults.listen((results) {
     },
     onError(e) => print(e);
 );
+
+// Wait for Bluetooth enabled & permission granted
+// In your real app you should use `FlutterBluePlus.adapterState.listen` to handle all states
+await FlutterBluePlus.adapterState.where((val) => val == BluetoothAdapterState.on).first;
 
 // Start scanning
 await FlutterBluePlus.startScan();
@@ -156,7 +162,7 @@ subscription.cancel();
 
 ```dart
 // listen for disconnection
-device.connectionState.listen((BluetoothConnectionState state) async {
+var subscription = device.connectionState.listen((BluetoothConnectionState state) async {
     if (state == BluetoothConnectionState.disconnected) {
         // 1. typically, start a periodic timer that tries to 
         //    reconnect, or just call connect() again right now
@@ -170,6 +176,9 @@ await device.connect();
 
 // Disconnect from device
 await device.disconnect();
+
+// cancel to prevent duplicate listeners
+subscription.cancel();
 ```
 
 ### MTU
@@ -179,13 +188,13 @@ On Android, we request an mtu of 512 by default during connection (see: `connect
 On iOS & macOS, the mtu is negotiated automatically, typically 135 to 255.
 
 ```dart
-final mtuSubscription = device.onMtu.listen((int mtu) {
+final subscription = device.mtu.listen((int mtu) {
     // iOS: initial value is always 23, but iOS will quickly negotiate a higher value
     print("mtu $mtu");
 });
 
 // cleanup: cancel subscription when disconnected
-device.cancelWhenDisconnected(mtuSubscription);
+device.cancelWhenDisconnected(subscription);
 
 // You can also manually change the mtu yourself.
 if (Platform.isAndroid) {
@@ -244,7 +253,7 @@ import 'dart:math';
 //    3. The characteristic must be designed to support split data
 extension splitWrite on BluetoothCharacteristic {
   Future<void> splitWrite(List<int> value, {int timeout = 15}) async {
-    int chunk = device.mtu - 3; // 3 bytes ble overhead
+    int chunk = device.mtuNow - 3; // 3 bytes ble overhead
     for (int i = 0; i < value.length; i += chunk) {
       List<int> subvalue = value.sublist(i, min(i + chunk, value.length));
       await write(subvalue, withoutResponse:false, timeout: timeout);
@@ -258,14 +267,14 @@ extension splitWrite on BluetoothCharacteristic {
 // If `onValueReceived` is never called, see [Common Problems](#common-problems) in the README.
 
 ```dart
-final chrSubscription = characteristic.onValueReceived.listen((value) {
+final subscription = characteristic.onValueReceived.listen((value) {
     // onValueReceived is updated:
     //   - anytime read() is called
     //   - anytime a notification arrives (if subscribed)
 });
 
 // cleanup: cancel subscription when disconnected
-device.cancelWhenDisconnected(chrSubscription);
+device.cancelWhenDisconnected(subscription);
 
 // subscribe
 // Note: If a characteristic supports both **notifications** and **indications**,
@@ -280,7 +289,7 @@ await characteristic.setNotifyValue(true);
 It is very convenient for simple characteristics that support both WRITE and READ (and/or NOTIFY). **e.g.** a "light switch toggle" characteristic. 
 
 ```dart
-final chrSubscription = characteristic.lastValueStream.listen((value) {
+final subscription = characteristic.lastValueStream.listen((value) {
     // lastValueStream` is updated:
     //   - anytime read() is called
     //   - anytime write() is called
@@ -289,7 +298,7 @@ final chrSubscription = characteristic.lastValueStream.listen((value) {
 });
 
 // cleanup: cancel subscription when disconnected
-device.cancelWhenDisconnected(chrSubscription);
+device.cancelWhenDisconnected(subscription);
 
 // enable notifications
 await characteristic.setNotifyValue(true);
@@ -374,7 +383,7 @@ There are streams for:
 
 ```dart
 // listen to *any device* connection state changes 
-FlutterBluePlus.events.connectionState.listen((event)) {
+FlutterBluePlus.events.onConnectionStateChanged.listen((event)) {
     print('${event.device} ${event.connectionState}');
 }
 ```
@@ -500,7 +509,9 @@ For location permissions on iOS see more at: [https://developer.apple.com/docume
 | adapterState        🌀 | :white_check_mark: | :white_check_mark: |        | Stream of on & off states of the bluetooth adapter         |
 | startScan              | :white_check_mark: | :white_check_mark: | :fire: | Starts a scan for Ble devices                              |
 | stopScan               | :white_check_mark: | :white_check_mark: | :fire: | Stop an existing scan for Ble devices                      |
-| scanResults         🌀 | :white_check_mark: | :white_check_mark: |        | Stream of live scan results                                |
+| onScanResults       🌀 | :white_check_mark: | :white_check_mark: |        | Stream of live scan results                                |
+| scanResults         🌀 | :white_check_mark: | :white_check_mark: |        | Stream of live scan results or previous results            |
+| lastScanResults     ⚡  | :white_check_mark: | :white_check_mark: |        | The most recent scan results                               |
 | isScanning          🌀 | :white_check_mark: | :white_check_mark: |        | Stream of current scanning state                           |
 | isScanningNow       ⚡  | :white_check_mark: | :white_check_mark: |        | Is a scan currently running?                               |
 | connectedDevices    ⚡  | :white_check_mark: | :white_check_mark: |        | List of devices connected to *your app*                    |
@@ -787,6 +798,46 @@ Maybe your device crashed, or is not sending a response due to software bugs.
 **4. there is radio interference**
 
 Bluetooth is wireless and will not always work.
+
+---
+
+### "bluetooth must be turned on"
+
+You need to wait for the bluetooth adapter to fully turn on. 
+
+`await FlutterBluePlus.adapterState.where((state) => state == BluetoothAdapterState.on).first;`
+
+You can also use `FlutterBluePlus.adapterState.listen(...)`. See [Usage](#usage).
+
+---
+
+### iOS: "[Error] The connection has timed out unexpectedly."
+
+You can google this error. It is a common iOS ble error code.
+
+It means your device stopped working. FlutterBluePlus cannot fix it.
+
+---
+
+### ANDROID_SPECIFIC_ERROR
+
+There is no 100% solution.  
+
+FBP already has mitigations for this error, but Android will still fail with this code randomly. 
+
+The recommended solution is to `catch` the error, and retry.
+
+---
+
+### MissingPluginException(No implementation found for method XXXX ...)
+
+If you just added flutter_blue_plus to your pubspec.yaml, a hot reload / hot restart is not enough.
+
+You need to fully stop your app and run again so that the native plugins are loaded.
+
+Also try `flutter clean`.
+
+
 
 
 
