@@ -106,7 +106,7 @@ public class FlutterBluePlusPlugin implements
     private final Map<String, Boolean> mAutoConnect = new ConcurrentHashMap<>();
     private final Map<String, String> mWriteChr = new ConcurrentHashMap<>();
     private final Map<String, String> mWriteDesc = new ConcurrentHashMap<>();
-    private final Map<String, BluetoothDevice> mScanSeen = new ConcurrentHashMap<>();
+    private final Map<String, String> mAdvSeen = new ConcurrentHashMap<>();
     private final Map<String, Integer> mScanCounts = new ConcurrentHashMap<>();
     private HashMap<String, Object> mScanFilters = new HashMap<String, Object>();
     
@@ -591,7 +591,7 @@ public class FlutterBluePlusPlugin implements
                         mScanFilters = data;
 
                         // clear seen devices
-                        mScanSeen.clear();
+                        mAdvSeen.clear();
                         mScanCounts.clear();
 
                         scanner.startScan(filters, settings, getScanCallback());
@@ -1860,31 +1860,31 @@ public class FlutterBluePlusPlugin implements
 
                     BluetoothDevice device = result.getDevice();
                     String remoteId = device.getAddress();
+                    ScanRecord scanRecord = result.getScanRecord();
+                    String advHex = scanRecord != null ? bytesToHex(scanRecord.getBytes()) : "";
 
-                    // already saw this device?
-                    boolean alreadySeen = mScanSeen.containsKey(remoteId);
-
-                    // add to seen devices
-                    mScanSeen.put(remoteId, device);
-
-                    // increment count
-                    int count = scanCountIncrement(remoteId);   
-
-                    // filter seen devices?
-                    if (alreadySeen && !(boolean) mScanFilters.get("continuous_updates")) {
-                        return;
-                    }
-
-                    // divisor
-                    if ((count % (int) mScanFilters.get("continuous_divisor")) != 0) {
-                        return;
+                    // filter duplicates
+                    if (((boolean) mScanFilters.get("continuous_updates")) == false) {
+                        boolean isDuplicate = mAdvSeen.containsKey(remoteId) && mAdvSeen.get(remoteId).equals(advHex);
+                        mAdvSeen.put(remoteId, advHex); // remember
+                        if (isDuplicate) {
+                            return;
+                        }
                     }
 
                     // filter keywords
-                    if (result != null && result.getScanRecord() != null) {
-                        String name = result.getScanRecord().getDeviceName();
+                    if (result != null && scanRecord != null) {
+                        String name = scanRecord.getDeviceName();
                         List<String> keywords = (List<String>) mScanFilters.get("with_keywords");
                         if (filterKeywords(keywords, name) == false) {
+                            return;
+                        }
+                    }
+
+                    // filter divisor
+                    if (((int) mScanFilters.get("continuous_updates")) != 0) {
+                        int count = scanCountIncrement(remoteId);   
+                        if ((count % (int) mScanFilters.get("continuous_divisor")) != 0) {
                             return;
                         }
                     }

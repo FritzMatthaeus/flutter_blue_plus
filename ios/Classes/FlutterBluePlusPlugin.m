@@ -1020,42 +1020,42 @@ typedef NS_ENUM(NSUInteger, LogLevel) {
     // add to known peripherals
     [self.knownPeripherals setObject:peripheral forKey:remoteId];
 
-    // increment scan count
-    NSInteger count = [self scanCountIncrement:remoteId];
-
     // advertising data
     NSString *advName = advertisementData[CBAdvertisementDataLocalNameKey];
     NSData *advMsd = advertisementData[CBAdvertisementDataManufacturerDataKey];
     NSDictionary* advSd = advertisementData[CBAdvertisementDataServiceDataKey];
 
-    // divisor
-    if (count % [self.scanFilters[@"continuous_divisor"] integerValue] != 0) {
-        return;
-    }
-
-    // remoteIds
+    // filter remoteIds
     if (![self filterRemoteIds:self.scanFilters[@"with_remote_ids"] target:remoteId]) {
         return;
     }
 
-    // names
+    // filter names
     if (![self filterNames:self.scanFilters[@"with_names"] target:advName]) {
         return;
     }
 
-    // keywords
+    // filter keywords
     if (![self filterKeywords:self.scanFilters[@"with_keywords"] target:advName]) {
         return;
     }
 
-    // msd
+    // filter msd
     if (![self filterMsd:self.scanFilters[@"with_msd"] msd:advMsd]) {
         return;
     }
 
-    // service data
+    // filter service data
     if (![self filterServiceData:self.scanFilters[@"with_service_data"] sd:advSd]) {
         return;
+    }
+
+    // filter divisor
+    if ([self.scanFilters[@"continuous_updates"] integerValue] != 0) {
+        NSInteger count = [self scanCountIncrement:remoteId];
+        if (count % [self.scanFilters[@"continuous_divisor"] integerValue] != 0) {
+            return;
+        }
     }
 
     // See BmScanResponse
